@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Natural Deduction Contraption</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <div id="game-wrapper">
+        <h1 id="game-title" class="text-4xl font-bold text-center text-sky-300 px-4 py-2">Natural Deduction Contraption</h1>
+
+        <div class="main-content-grid">
+            <div id="wff-construction-area" class="game-section">
+                <h2>WFF Constructor</h2>
+
+                <!-- Propositional Logic Accordion -->
+                <div id="prop-logic-accordion" class="accordion">
+                    <div id="prop-logic-header" class="accordion-header">Propositional Logic</div>
+                    <div id="prop-logic-content" class="accordion-content">
+                        <div class="tool-area">
+                            <h3>Drag Variables:</h3>
+                            <div class="draggable-var" draggable="true" data-type="prop-variable" data-symbol="P">P</div>
+                            <div class="draggable-var" draggable="true" data-type="prop-variable" data-symbol="Q">Q</div>
+                            <div class="draggable-var" draggable="true" data-type="prop-variable" data-symbol="R">R</div>
+                            <div class="draggable-var" draggable="true" data-type="prop-variable" data-symbol="S">S</div>
+                        </div>
+                        <div class="tool-area">
+                            <h3>Drop on Connectives:</h3>
+                            <div class="connective-hotspot" data-connective="~" title="Drop ONE formula/var here for NOT">~</div>
+                            <div class="connective-hotspot" data-connective="∧" title="Drop TWO formulas/vars here for AND">∧</div>
+                            <div class="connective-hotspot" data-connective="∨" title="Drop TWO formulas/vars here for OR">∨</div>
+                            <div class="connective-hotspot" data-connective="→" title="Drop TWO formulas/vars here for IMPLIES">→</div>
+                            <div class="connective-hotspot" data-connective="↔" title="Drop TWO formulas/vars here for IFF">↔</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- First-Order Logic Accordion -->
+                <div id="fol-logic-accordion" class="accordion">
+                    <div id="fol-logic-header" class="accordion-header closed">First-Order Logic</div>
+                    <div id="fol-logic-content" class="accordion-content hidden">
+                        <div class="tool-area">
+                            <h3>Drag Predicates:</h3>
+                            <div class="draggable-var fol-predicate" draggable="true" data-type="predicate" data-symbol="F">F</div>
+                            <div class="draggable-var fol-predicate" draggable="true" data-type="predicate" data-symbol="G">G</div>
+                            <div class="draggable-var fol-predicate" draggable="true" data-type="predicate" data-symbol="H">H</div>
+                        </div>
+                        <div class="tool-area">
+                            <h3>Drag Variables:</h3>
+                            <div class="draggable-var fol-variable" draggable="true" data-type="fol-variable" data-symbol="x">x</div>
+                            <div class="draggable-var fol-variable" draggable="true" data-type="fol-variable" data-symbol="y">y</div>
+                            <div class="draggable-var fol-variable" draggable="true" data-type="fol-variable" data-symbol="z">z</div>
+                        </div>
+                        <div class="tool-area">
+                            <h3>Drop on Quantifiers/Descriptions:</h3>
+                            <div class="connective-hotspot" data-connective="∀" title="Drop a variable, then a formula">∀</div>
+                            <div class="connective-hotspot" data-connective="∃" title="Drop a variable, then a formula">∃</div>
+                            <div class="connective-hotspot" data-connective="ι" title="Drop a variable, then a formula for a definite description">ι</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="wff-output-header mt-4">
+                    <h3>WFF Output</h3>
+                    <div class="flex items-center">
+                         <div class="wff-zoom-controls">
+                            <button id="zoom-out-wff" title="Decrease size">-</button>
+                            <button id="zoom-in-wff" title="Increase size">+</button>
+                        </div>
+                        <div id="trash-can-drop-area" class="ml-2" title="Drag WFF from tray here to delete">🗑️</div>
+                    </div>
+                </div>
+                <div id="wff-output-tray" title="Drag WFFs here to construct, or to proof area.">
+                </div>
+            </div>
+
+            <div id="proof-area" class="game-section">
+                <h2>Proof</h2>
+                <div id="proof-problem-info">
+                    <!-- Problem headers will be injected here by JS -->
+                </div>
+                <div id="subproof-goal-display-container" class="mt-2"></div>
+                <div id="feedback-container">
+                    <button id="prev-feedback" class="feedback-nav-button">&lt;</button>
+                    <div id="proof-feedback"></div>
+                    <button id="next-feedback" class="feedback-nav-button">&gt;</button>
+                </div>
+                <ol id="proof-lines">
+                    </ol>
+            </div>
+
+            <div id="rules-and-subproofs-column" class="game-section">
+                <div id="subproofs-area">
+                    <h2>Subproofs</h2>
+                    <div class="rule-item" data-rule="CI" data-premises="1">
+                        Conditional Introduction (→I)
+                        <div class="rule-slots">
+                            <div class="drop-slot" data-premise-index="0" data-expected-pattern="φ → ψ">Goal (e.g., φ → ψ)</div>
+                        </div>
+                    </div>
+                    <div class="rule-item" data-rule="UI" data-premises="1" data-logic-type="fol">
+                        Universal Introduction (∀I)
+                        <div class="rule-slots">
+                            <div class="drop-slot" data-premise-index="0">Goal (e.g., ∀xφx)</div>
+                        </div>
+                    </div>
+                    <div class="rule-item" data-rule="EE" data-premises="2" data-logic-type="fol">
+                        Existential Elimination (∃E)
+                        <div class="rule-slots">
+                            <div class="drop-slot" data-premise-index="0">Major Premise (e.g., ∃xφx)</div>
+                             <div class="drop-slot" data-premise-index="1">Subproof Conclusion (e.g., ψ)</div>
+                        </div>
+                    </div>
+                </div>
+                <div id="inference-rules-area" class="mt-4">
+                    <h2>Inference Rules</h2>
+                    <div class="rule-item" data-rule="MP" data-premises="2">
+                        Modus Ponens (MP / →E)
+                        <div class="rule-slots">
+                            <div class="drop-slot" data-premise-index="0" data-expected-pattern="φ → ψ">Premise 1 (e.g., φ → ψ)</div>
+                            <div class="drop-slot" data-premise-index="1" data-expected-pattern="φ">Premise 2 (e.g., φ)</div>
+                        </div>
+                    </div>
+                    <div class="rule-item" data-rule="MT" data-premises="2">
+                        Modus Tollens (MT)
+                        <div class="rule-slots">
+                            <div class="drop-slot" data-premise-index="0" data-expected-pattern="φ → ψ">Premise 1 (e.g., φ → ψ)</div>
+                            <div class="drop-slot" data-premise-index="1" data-expected-pattern="~ψ">Premise 2 (e.g., ~ψ)</div>
+                        </div>
+                    </div>
+                    <div class="rule-item" data-rule="AndI" data-premises="2">
+                        And Introduction (∧I)
+                         <div class="rule-slots">
+                            <div class="drop-slot" data-premise-index="0">Premise 1 (e.g., φ)</div>
+                            <div class="drop-slot" data-premise-index="1">Premise 2 (e.g., ψ)</div>
+                        </div>
+                    </div>
+                    <div class="rule-item" data-rule="AndE" data-premises="1">
+                        And Elimination (∧E)
+                        <div class="rule-slots">
+                            <div class="drop-slot" data-premise-index="0" data-expected-pattern="φ ∧ ψ">Premise (e.g., φ ∧ ψ)</div>
+                            </div>
+                    </div>
+                    <!-- **NEW:** Updated UI for Existential Introduction -->
+                    <div class="rule-item" data-rule="EI" data-premises="2" data-logic-type="fol"> 
+                        Existential Introduction (∃I)
+                         <div class="rule-slots">
+                            <div class="drop-slot" data-premise-index="0">Formula (e.g., F(a))</div>
+                            <div class="drop-slot" data-premise-index="1">Variable to Generalize (e.g., x)</div>
+                        </div>
+                    </div>
+                     <div class="rule-item" data-rule="DN" data-premises="1">
+                        Double Negation (DN)
+                        <div class="rule-slots">
+                            <div class="drop-slot" data-premise-index="0" data-expected-pattern="~~φ or φ">Premise (e.g., ~~φ or φ)</div>
+                        </div>
+                    </div>
+                    <div class="rule-item" data-rule="Reiteration" data-premises="1">
+                        Reiteration (Re)
+                        <div class="rule-slots">
+                            <div class="drop-slot" data-premise-index="0">Line to Reiterate</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/globals.js"></script>
+    <script src="js/parser.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/drag-drop.js"></script>
+    <script src="js/rules.js"></script>
+    <script src="js/proof.js"></script>
+    <script src="js/problems.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

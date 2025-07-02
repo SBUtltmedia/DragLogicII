@@ -1,0 +1,332 @@
+/* Custom Styles */
+:root {
+    --game-width-ref: 1200;
+}
+html {
+    font-size: 1rem; /* Base font size, will be scaled by JS */
+    height: 100%;
+    overflow: hidden; /* Prevent scrollbars on html/body */
+}
+body {
+    background-color: #334155; /* Slate-700 */
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: #e2e8f0; /* Slate-200 */
+    margin: 0;
+    padding: 0; /* Remove default body padding */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100%;
+    overflow: hidden; /* Prevent scrollbars on html/body */
+    /* **FIX**: Disable text selection */
+    -webkit-user-select: none; /* Safari */
+    -ms-user-select: none; /* IE 10+ and Edge */
+    user-select: none; /* Standard syntax */
+}
+
+#game-wrapper {
+    position: relative;
+    overflow: hidden; /* Crucial for containing scaled content */
+    margin: auto; /* Center the wrapper if it's smaller than viewport */
+    background-color: #475569; /* Slate-600 */
+    box-shadow: 0 0 0.09375rem rgba(0,0,0,0.6);
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box; /* Include padding and border in the element's total width and height */
+    transition: transform 0.3s ease-in-out; /* For smooth zoom */
+}
+
+/* Class to apply zoom */
+#game-wrapper.zoomed {
+    transform: scale(1.5);
+}
+
+.disabled-section {
+    opacity: 0.3;
+    pointer-events: none;
+}
+
+/* Adjust font sizes using rem, which will scale with html font-size */
+h1 { font-size: 2rem; text-shadow: 0.03125rem 0.03125rem 0.0625rem #000; }
+h2 { font-size: 1.2rem; margin-bottom: 0.5rem; color: #cbd5e1; /* Slate-300 */}
+h3 { font-size: 1rem; margin-bottom: 0.3rem; color: #94a3b8; /* Slate-400 */}
+p, button, span, div, li { font-size: 0.8rem; }
+button { padding: 0.4rem 0.8rem; }
+
+.main-content-grid {
+    display: grid;
+    grid-template-columns: 1fr 2fr 1fr; /* WFF | Proof | Rules */
+    gap: 1rem;
+    width: 100%;
+    flex-grow: 1; /* Allow grid to take available vertical space */
+    padding: 1rem;
+    overflow: hidden; /* Prevent internal scrollbars unless necessary in .game-section */
+    box-sizing: border-box;
+}
+
+.game-section {
+    background-color: #1e293b; /* Slate-800 */
+    border: 0.0625rem solid #334155; /* Slate-700 */
+    border-radius: 0.3125rem;
+    padding: 0.8rem;
+    overflow-y: auto; /* Allow scrolling within sections if content overflows */
+    display: flex;
+    flex-direction: column;
+}
+.game-section h2 {
+    border-bottom: 0.0625rem solid #475569; /* Slate-600 */
+    padding-bottom: 0.3rem;
+    margin-top: 0;
+}
+
+/* Proof Area Specifics */
+#proof-area ol { list-style-type: none; padding-left: 0; flex-grow: 1; overflow-y: auto; margin: 0; border: 0.125rem dashed transparent; /* For drop target indication */ }
+#proof-area ol.drag-over-proof { border-color: #60a5fa; background-color: rgba(96, 165, 250, 0.1); }
+
+#proof-area.proof-complete {
+    pointer-events: none; /* Disable all mouse events */
+    opacity: 0.7;
+}
+
+.next-problem-button {
+    background-color: #10b981;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    margin-top: 1rem;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+    pointer-events: auto;
+}
+
+.next-problem-button:hover {
+    background-color: #059669;
+}
+
+#proof-area li {
+    background-color: #334155; /* Slate-700 */
+    margin-bottom: 0.3rem;
+    padding: 0.4rem 0.6rem;
+    border-radius: 0.25rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 0.0625rem solid #475569; /* Slate-600 */
+    transition: background-color 0.3s ease;
+    position: relative; /* For subproof lines */
+}
+/* Subproof Indentation and Lines */
+.subproof-line { /* Common style for all subproof lines including assumption */
+    /* margin-left will be set by JS */
+    border-left: 0.125rem solid #60a5fa; /* Vertical line for scope */
+    padding-left: 0.8rem !important; /* Adjust padding after line, ensure it overrides */
+}
+ .subproof-assumption {
+    background-color: #4b5563 !important; /* Slightly different background for assumption */
+}
+.show-line { /* Style for the "Show: φ" line */
+    background-color: #0f172a; /* Darker, like goal */
+    border-style: dashed;
+    border-color: #f59e0b; /* Amber */
+}
+.show-line .formula {
+    color: #f59e0b; /* Amber text for the formula being shown */
+}
+.show-line.proven-show-line { /* Style for when a "Show" line is proven */
+    background-color: #334155; /* Back to normal line color */
+    border-style: solid;
+    border-color: #22c55e; /* Green border to indicate success */
+}
+.show-line.proven-show-line .formula {
+    color: #f1f5f9; /* Back to normal formula color */
+}
+/* Collapsible subproof styles */
+.subproof-header-collapsible .formula {
+    cursor: pointer;
+}
+.subproof-header-collapsible .line-number::after { /* Basic expand/collapse indicator */
+    content: ' [+]'; /* Default to collapsed */
+    font-size: 0.7em;
+    color: #94a3b8;
+    font-family: monospace; /* Use fixed-width font for indicator */
+}
+.subproof-header-collapsible[data-collapsed="false"] .line-number::after {
+    content: ' [-]';
+    font-family: monospace; /* Ensure consistency */
+}
+.subproof-content-hidden {
+    display: none !important;
+}
+
+
+#proof-area li.proof-line-complete { background-color: #166534; border-color: #22c55e; }
+#proof-area li.proof-line-complete .formula,
+#proof-area li.proof-line-complete .line-number,
+#proof-area li.proof-line-complete .justification { color: #f0fdf4; }
+.line-number { color: #94a3b8; margin-right: 0.5rem; font-weight: bold; }
+.formula { font-family: monospace; color: #f1f5f9; cursor: grab; padding: 0.2rem 0.4rem; background-color: #2d3748; border: 0.0625rem solid #4a5568; border-radius: 0.09375rem; display: inline-flex; align-items: center; gap: 0.09375rem; margin-right: auto; transition: transform 0.2s ease-in-out; }
+.formula.dragging { opacity: 0.5; cursor: grabbing; box-shadow: 0 0 0.3125rem #60a5fa; }
+.justification { font-size: 0.7rem; color: #64748b; white-space: nowrap; flex-shrink: 0; }
+.proof-header, .proof-goal, .subproof-goal-display { padding: 0.5rem; margin-bottom: 0.5rem; background-color: #0f172a; border-radius: 0.25rem; }
+.proof-header span, .proof-goal span, .subproof-goal-display span { font-weight: bold; color: #60a5fa; }
+.subproof-goal-display { color: #f59e0b; /* Amber for sub-goal */ }
+
+/* Feedback Area Styles */
+#feedback-container { display: flex; align-items: center; justify-content: center; margin-top: 0.5rem; min-height: 1.5rem; }
+#proof-feedback {
+    text-align: center;
+    font-weight: bold;
+    flex-grow: 1;
+    margin: 0 0.5rem;
+    opacity: 1;
+    transition: opacity 0.5s ease-out;
+}
+
+#proof-feedback.fade-out {
+    opacity: 0;
+}
+
+#proof-feedback.hidden-feedback {
+    visibility: hidden;
+}
+.feedback-nav-button {
+    background-color: #4b5563; /* slate-600 */
+    color: #cbd5e1; /* slate-300 */
+    border: 0.0625rem solid #64748b; /* slate-500 */
+    border-radius: 50%;
+    width: 1.5rem;
+    height: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    flex-shrink: 0;
+}
+.feedback-nav-button:hover { background-color: #64748b; }
+.feedback-nav-button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+
+/* WFF Construction & Inference Rules Specifics */
+.tool-area { margin-bottom: 0.8rem; }
+.tool-area h3 { margin-bottom: 0.2rem; }
+.tool-button, .draggable-var, .connective-hotspot { border: none; padding: 0.5rem; margin: 0.25rem; border-radius: 0.25rem; transition: background-color 0.2s; text-align: center; font-weight: bold; }
+.tool-button { background-color: #3b82f6; color: white; cursor: pointer; }
+.tool-button:hover { background-color: #2563eb; }
+.draggable-var { background-color: #f5f5dc; color: #3b271a; border: 0.0625rem solid #a0522d; cursor: grab; display: inline-block; }
+.draggable-var.fol-predicate { background-color: #dcfce7; color: #14532d; border-color: #16a34a; } /* Green */
+
+/* **FIX**: Remove special styling for FOL variables */
+.draggable-var.fol-variable {
+    background-color: transparent;
+    color: inherit;
+    border: none;
+    padding: 0.0625rem 0.125rem;
+    margin: 0.0625rem;
+}
+
+.draggable-var.dragging { opacity: 0.5; cursor: grabbing; }
+.connective-hotspot { background-color: #4b5563; color: white; border: 0.125rem dashed #6b7280; cursor: copy; min-width: 3rem; display: inline-block; padding: 0.5rem 0.3rem; font-size: 0.75rem; }
+.connective-hotspot.waiting { border-style: solid; border-color: #f59e0b; }
+.connective-hotspot.drag-over { border-color: #60a5fa; background-color: #334155; }
+
+.wff-output-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+.wff-output-header h3 {
+     margin-bottom: 0;
+}
+
+#wff-output-tray {
+    background-color: #0f172a; padding: 0.5rem;
+    border-radius: 0.25rem;
+    min-height: 5rem; font-family: monospace; color: #f1f5f9;
+    display: flex; flex-wrap: wrap; gap: 0.5rem; align-content: flex-start;
+    align-items: center;
+    border: 0.125rem dashed transparent;
+    position: relative;
+    /* **NEW:** CSS variable for font size */
+    font-size: var(--wff-tray-font-size, 0.8rem);
+}
+#wff-output-tray.drag-over-tray {
+    border-color: #60a5fa;
+    background-color: rgba(96, 165, 250, 0.1);
+}
+#wff-output-tray .formula { background-color: #3b82f6; color: white; border-color: #1d4ed8; cursor: grab; }
+#wff-output-tray .formula.drag-over { border: 0.125rem dashed #60a5fa; transform: scale(1.1); }
+#wff-output-tray .formula.dragging { opacity: 0.5; cursor: grabbing; }
+
+.wff-zoom-controls button {
+    background-color: #4b5563;
+    color: white;
+    border: none;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 50%;
+    margin-left: 0.25rem;
+    cursor: pointer;
+    line-height: 1.5rem;
+    padding: 0;
+}
+.wff-zoom-controls button:hover {
+    background-color: #64748b;
+}
+
+#trash-can-drop-area {
+    padding: 0.0625rem 0.1875rem;
+    border: 0.0625rem dashed #4a5568;
+    border-radius: 0.15625rem;
+    font-size: 0.9rem;
+    color: #64748b;
+    cursor: default;
+    flex-shrink: 0;
+}
+#trash-can-drop-area.trash-can-drag-over {
+    border-color: #ef4444;
+    background-color: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+}
+
+/* Accordion Styles */
+.accordion-header {
+    cursor: pointer;
+    background-color: #334155;
+    padding: 0.4rem 0.6rem;
+    border-radius: 0.25rem;
+    margin-bottom: 0.3rem;
+    border: 0.0625rem solid #475569;
+}
+.accordion-header::after {
+    content: ' ▼';
+    float: right;
+    transition: transform 0.2s ease;
+}
+.accordion-header.closed::after {
+    transform: rotate(-90deg);
+}
+.accordion-content {
+    padding: 0.5rem;
+    border: 0.0625rem solid #334155;
+    border-top: none;
+    border-radius: 0 0 0.25rem 0.25rem;
+}
+.accordion-content.hidden {
+    display: none;
+}
+
+
+.rule-item { background-color: #334155; padding: 0.5rem; margin-bottom: 0.3rem; border-radius: 0.25rem; cursor: pointer; text-align: center; border: 0.0625rem solid #475569; user-select: none; }
+.rule-item:hover { background-color: #475569; }
+.rule-item.active { background-color: #4a5568; }
+.rule-slots { display: none; padding: 0.5rem; margin-top: 0.3rem; background-color: #2d3748; border-radius: 0.25rem; border: 0.0625rem dashed #4a5568; }
+.rule-item.active .rule-slots { display: flex; flex-direction: column; gap: 0.5rem; }
+.drop-slot { background-color: #4a5568; border: 0.125rem dashed #64748b; min-height: 2.5rem; border-radius: 0.15625rem; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-style: italic; font-size: 0.75rem; padding: 0.3rem; transition: transform 0.2s ease-in-out; }
+.drop-slot.drag-over { border-color: #60a5fa; background-color: #334155; transform: scale(1.05); }
+.apply-rule-button { background-color: #10b981; margin-top: 0.5rem; color: white; border: none; cursor: pointer; }
+.apply-rule-button:hover { background-color: #059669; }

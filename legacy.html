@@ -1,0 +1,1915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Natural Deduction Contraption</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom Styles */
+        :root {
+            --game-width-ref: 1200;
+        }
+        html {
+            font-size: 16px; /* Base font size, will be scaled by JS */
+            height: 100%;
+            overflow: hidden; /* Prevent scrollbars on html/body */
+        }
+        body {
+            background-color: #334155; /* Slate-700 */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #e2e8f0; /* Slate-200 */
+            margin: 0;
+            padding: 0; /* Remove default body padding */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100%;
+            overflow: hidden; /* Prevent scrollbars on html/body */
+            /* **FIX**: Disable text selection */
+            -webkit-user-select: none; /* Safari */
+            -ms-user-select: none; /* IE 10+ and Edge */
+            user-select: none; /* Standard syntax */
+        }
+
+        #game-wrapper {
+            position: relative;
+            overflow: hidden; /* Crucial for containing scaled content */
+            margin: auto; /* Center the wrapper if it's smaller than viewport */
+            background-color: #475569; /* Slate-600 */
+            box-shadow: 0 0 1.5rem rgba(0,0,0,0.6);
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box; /* Include padding and border in the element's total width and height */
+            transition: transform 0.3s ease-in-out; /* For smooth zoom */
+        }
+
+        /* Class to apply zoom */
+        #game-wrapper.zoomed {
+            transform: scale(1.5);
+        }
+
+        /* Adjust font sizes using rem, which will scale with html font-size */
+        h1 { font-size: 2rem; text-shadow: 0.05rem 0.05rem 0.1rem #000; }
+        h2 { font-size: 1.2rem; margin-bottom: 0.5rem; color: #cbd5e1; /* Slate-300 */}
+        h3 { font-size: 1rem; margin-bottom: 0.3rem; color: #94a3b8; /* Slate-400 */}
+        p, button, span, div, li { font-size: 0.8rem; }
+        button { padding: 0.4rem 0.8rem; }
+
+        .main-content-grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr 1fr; /* WFF | Proof | Rules */
+            gap: 1rem;
+            width: 100%;
+            flex-grow: 1; /* Allow grid to take available vertical space */
+            padding: 1rem;
+            overflow: hidden; /* Prevent internal scrollbars unless necessary in .game-section */
+            box-sizing: border-box;
+        }
+
+        .game-section {
+            background-color: #1e293b; /* Slate-800 */
+            border: 1px solid #334155; /* Slate-700 */
+            border-radius: 0.5rem;
+            padding: 0.8rem;
+            overflow-y: auto; /* Allow scrolling within sections if content overflows */
+            display: flex;
+            flex-direction: column;
+        }
+        .game-section h2 {
+            border-bottom: 1px solid #475569; /* Slate-600 */
+            padding-bottom: 0.3rem;
+            margin-top: 0;
+        }
+
+        /* Proof Area Specifics */
+        #proof-area ol { list-style-type: none; padding-left: 0; flex-grow: 1; overflow-y: auto; margin: 0; border: 2px dashed transparent; /* For drop target indication */ }
+        #proof-area ol.drag-over-proof { border-color: #60a5fa; background-color: rgba(96, 165, 250, 0.1); }
+
+        #proof-area li {
+            background-color: #334155; /* Slate-700 */
+            margin-bottom: 0.3rem;
+            padding: 0.4rem 0.6rem;
+            border-radius: 0.25rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 1px solid #475569; /* Slate-600 */
+            transition: background-color 0.3s ease;
+            position: relative; /* For subproof lines */
+        }
+        /* Subproof Indentation and Lines */
+        .subproof-line { /* Common style for all subproof lines including assumption */
+            /* margin-left will be set by JS */
+            border-left: 2px solid #60a5fa; /* Vertical line for scope */
+            padding-left: 0.8rem !important; /* Adjust padding after line, ensure it overrides */
+        }
+         .subproof-assumption {
+            background-color: #4b5563 !important; /* Slightly different background for assumption */
+        }
+        .show-line { /* Style for the "Show: φ" line */
+            background-color: #0f172a; /* Darker, like goal */
+            border-style: dashed;
+            border-color: #f59e0b; /* Amber */
+        }
+        .show-line .formula {
+            color: #f59e0b; /* Amber text for the formula being shown */
+        }
+        .show-line.proven-show-line { /* Style for when a "Show" line is proven */
+            background-color: #334155; /* Back to normal line color */
+            border-style: solid;
+            border-color: #22c55e; /* Green border to indicate success */
+        }
+        .show-line.proven-show-line .formula {
+            color: #f1f5f9; /* Back to normal formula color */
+        }
+        /* Collapsible subproof styles */
+        .subproof-header-collapsible .formula {
+            cursor: pointer;
+        }
+        .subproof-header-collapsible .line-number::after { /* Basic expand/collapse indicator */
+            content: ' [+]'; /* Default to collapsed */
+            font-size: 0.7em;
+            color: #94a3b8;
+            font-family: monospace; /* Use fixed-width font for indicator */
+        }
+        .subproof-header-collapsible[data-collapsed="false"] .line-number::after {
+            content: ' [-]';
+            font-family: monospace; /* Ensure consistency */
+        }
+        .subproof-content-hidden {
+            display: none !important;
+        }
+
+
+        #proof-area li.proof-line-complete { background-color: #166534; border-color: #22c55e; }
+        #proof-area li.proof-line-complete .formula,
+        #proof-area li.proof-line-complete .line-number,
+        #proof-area li.proof-line-complete .justification { color: #f0fdf4; }
+        .line-number { color: #94a3b8; margin-right: 0.5rem; font-weight: bold; }
+        .formula { font-family: monospace; color: #f1f5f9; cursor: grab; padding: 0.2rem 0.4rem; background-color: #2d3748; border: 1px solid #4a5568; border-radius: 0.15rem; display: inline-flex; align-items: center; gap: 0.15rem; margin-right: auto; transition: transform 0.2s ease-in-out; }
+        .formula.dragging { opacity: 0.5; cursor: grabbing; box-shadow: 0 0 5px #60a5fa; }
+        .justification { font-size: 0.7rem; color: #64748b; white-space: nowrap; flex-shrink: 0; }
+        .proof-header, .proof-goal, .subproof-goal-display { padding: 0.5rem; margin-bottom: 0.5rem; background-color: #0f172a; border-radius: 0.25rem; }
+        .proof-header span, .proof-goal span, .subproof-goal-display span { font-weight: bold; color: #60a5fa; }
+        .subproof-goal-display { color: #f59e0b; /* Amber for sub-goal */ }
+        
+        /* Feedback Area Styles */
+        #feedback-container { display: flex; align-items: center; justify-content: center; margin-top: 0.5rem; min-height: 1.5rem; }
+        #proof-feedback { text-align: center; font-weight: bold; flex-grow: 1; margin: 0 0.5rem; }
+        .feedback-nav-button {
+            background-color: #4b5563; /* slate-600 */
+            color: #cbd5e1; /* slate-300 */
+            border: 1px solid #64748b; /* slate-500 */
+            border-radius: 50%;
+            width: 1.5rem;
+            height: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            flex-shrink: 0;
+        }
+        .feedback-nav-button:hover { background-color: #64748b; }
+        .feedback-nav-button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+
+        /* WFF Construction & Inference Rules Specifics */
+        .tool-area { margin-bottom: 0.8rem; }
+        .tool-area h3 { margin-bottom: 0.2rem; }
+        .tool-button, .draggable-var, .connective-hotspot { border: none; padding: 0.5rem; margin: 0.25rem; border-radius: 0.25rem; transition: background-color 0.2s; text-align: center; font-weight: bold; }
+        .tool-button { background-color: #3b82f6; color: white; cursor: pointer; }
+        .tool-button:hover { background-color: #2563eb; }
+        .draggable-var { background-color: #f5f5dc; color: #3b271a; border: 1px solid #a0522d; cursor: grab; display: inline-block; }
+        .draggable-var.fol-predicate { background-color: #dcfce7; color: #14532d; border-color: #16a34a; } /* Green */
+        
+        /* **FIX**: Remove special styling for FOL variables */
+        .draggable-var.fol-variable { 
+            background-color: transparent;
+            color: inherit;
+            border: none;
+            padding: 0.1rem 0.2rem;
+            margin: 0.1rem;
+        }
+
+        .draggable-var.dragging { opacity: 0.5; cursor: grabbing; }
+        .connective-hotspot { background-color: #4b5563; color: white; border: 2px dashed #6b7280; cursor: copy; min-width: 3rem; display: inline-block; padding: 0.5rem 0.3rem; font-size: 0.75rem; }
+        .connective-hotspot.waiting { border-style: solid; border-color: #f59e0b; }
+        .connective-hotspot.drag-over { border-color: #60a5fa; background-color: #334155; }
+        
+        .wff-output-header {
+            display: flex;
+            justify-content: space-between; 
+            align-items: center;
+            margin-bottom: 0.5rem; 
+        }
+        .wff-output-header h3 {
+             margin-bottom: 0; 
+        }
+
+        #wff-output-tray {
+            background-color: #0f172a; padding: 0.5rem; 
+            border-radius: 0.25rem;
+            min-height: 5rem; font-family: monospace; color: #f1f5f9;
+            display: flex; flex-wrap: wrap; gap: 0.5rem; align-content: flex-start;
+            align-items: center; 
+            border: 2px dashed transparent; 
+            position: relative; 
+            /* **NEW:** CSS variable for font size */
+            font-size: var(--wff-tray-font-size, 0.8rem);
+        }
+        #wff-output-tray.drag-over-tray {
+            border-color: #60a5fa; 
+            background-color: rgba(96, 165, 250, 0.1);
+        }
+        #wff-output-tray .formula { background-color: #3b82f6; color: white; border-color: #1d4ed8; cursor: grab; }
+        #wff-output-tray .formula.drag-over { border: 2px dashed #60a5fa; transform: scale(1.1); }
+        #wff-output-tray .formula.dragging { opacity: 0.5; cursor: grabbing; }
+
+        .wff-zoom-controls button {
+            background-color: #4b5563;
+            color: white;
+            border: none;
+            width: 1.5rem;
+            height: 1.5rem;
+            border-radius: 50%;
+            margin-left: 0.25rem;
+            cursor: pointer;
+            line-height: 1.5rem;
+            padding: 0;
+        }
+        .wff-zoom-controls button:hover {
+            background-color: #64748b;
+        }
+
+        #trash-can-drop-area {
+            padding: 0.1rem 0.3rem; 
+            border: 1px dashed #4a5568; 
+            border-radius: 0.25rem;
+            font-size: 0.9rem; 
+            color: #64748b; 
+            cursor: default; 
+            flex-shrink: 0; 
+        }
+        #trash-can-drop-area.trash-can-drag-over {
+            border-color: #ef4444; 
+            background-color: rgba(239, 68, 68, 0.1); 
+            color: #ef4444;
+        }
+
+        /* Accordion Styles */
+        .accordion-header {
+            cursor: pointer;
+            background-color: #334155;
+            padding: 0.4rem 0.6rem;
+            border-radius: 0.25rem;
+            margin-bottom: 0.3rem;
+            border: 1px solid #475569;
+        }
+        .accordion-header::after {
+            content: ' ▼';
+            float: right;
+            transition: transform 0.2s ease;
+        }
+        .accordion-header.closed::after {
+            transform: rotate(-90deg);
+        }
+        .accordion-content {
+            padding: 0.5rem;
+            border: 1px solid #334155;
+            border-top: none;
+            border-radius: 0 0 0.25rem 0.25rem;
+        }
+        .accordion-content.hidden {
+            display: none;
+        }
+
+
+        .rule-item { background-color: #334155; padding: 0.5rem; margin-bottom: 0.3rem; border-radius: 0.25rem; cursor: pointer; text-align: center; border: 1px solid #475569; user-select: none; }
+        .rule-item:hover { background-color: #475569; }
+        .rule-item.active { background-color: #4a5568; }
+        .rule-slots { display: none; padding: 0.5rem; margin-top: 0.3rem; background-color: #2d3748; border-radius: 0.25rem; border: 1px dashed #4a5568; }
+        .rule-item.active .rule-slots { display: flex; flex-direction: column; gap: 0.5rem; }
+        .drop-slot { background-color: #4a5568; border: 2px dashed #64748b; min-height: 2.5rem; border-radius: 0.25rem; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-style: italic; font-size: 0.75rem; padding: 0.3rem; transition: transform 0.2s ease-in-out; }
+        .drop-slot.drag-over { border-color: #60a5fa; background-color: #334155; transform: scale(1.05); }
+        .apply-rule-button { background-color: #10b981; margin-top: 0.5rem; color: white; border: none; cursor: pointer; }
+        .apply-rule-button:hover { background-color: #059669; }
+
+    </style>
+</head>
+<body>
+
+    <div id="game-wrapper">
+        <h1 id="game-title" class="text-4xl font-bold text-center text-sky-300 px-4 py-2">Natural Deduction Contraption</h1>
+
+        <div class="main-content-grid">
+            <div id="wff-construction-area" class="game-section">
+                <h2>WFF Constructor</h2>
+
+                <!-- Propositional Logic Accordion -->
+                <div class="accordion">
+                    <div id="prop-logic-header" class="accordion-header">Propositional Logic</div>
+                    <div id="prop-logic-content" class="accordion-content">
+                        <div class="tool-area">
+                            <h3>Drag Variables:</h3>
+                            <div class="draggable-var" draggable="true" data-type="prop-variable" data-symbol="P">P</div>
+                            <div class="draggable-var" draggable="true" data-type="prop-variable" data-symbol="Q">Q</div>
+                            <div class="draggable-var" draggable="true" data-type="prop-variable" data-symbol="R">R</div>
+                            <div class="draggable-var" draggable="true" data-type="prop-variable" data-symbol="S">S</div>
+                        </div>
+                        <div class="tool-area">
+                            <h3>Drop on Connectives:</h3>
+                            <div class="connective-hotspot" data-connective="~" title="Drop ONE formula/var here for NOT">~</div>
+                            <div class="connective-hotspot" data-connective="∧" title="Drop TWO formulas/vars here for AND">∧</div>
+                            <div class="connective-hotspot" data-connective="∨" title="Drop TWO formulas/vars here for OR">∨</div>
+                            <div class="connective-hotspot" data-connective="→" title="Drop TWO formulas/vars here for IMPLIES">→</div>
+                            <div class="connective-hotspot" data-connective="↔" title="Drop TWO formulas/vars here for IFF">↔</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- First-Order Logic Accordion -->
+                <div class="accordion">
+                    <div id="fol-logic-header" class="accordion-header closed">First-Order Logic</div>
+                    <div id="fol-logic-content" class="accordion-content hidden">
+                        <div class="tool-area">
+                            <h3>Drag Predicates:</h3>
+                            <div class="draggable-var fol-predicate" draggable="true" data-type="predicate" data-symbol="F">F</div>
+                            <div class="draggable-var fol-predicate" draggable="true" data-type="predicate" data-symbol="G">G</div>
+                            <div class="draggable-var fol-predicate" draggable="true" data-type="predicate" data-symbol="H">H</div>
+                        </div>
+                        <div class="tool-area">
+                            <h3>Drag Variables:</h3>
+                            <div class="draggable-var fol-variable" draggable="true" data-type="fol-variable" data-symbol="x">x</div>
+                            <div class="draggable-var fol-variable" draggable="true" data-type="fol-variable" data-symbol="y">y</div>
+                            <div class="draggable-var fol-variable" draggable="true" data-type="fol-variable" data-symbol="z">z</div>
+                        </div>
+                        <div class="tool-area">
+                            <h3>Drop on Quantifiers:</h3>
+                            <div class="connective-hotspot" data-connective="∀" title="Drop a variable, then a formula">∀</div>
+                            <div class="connective-hotspot" data-connective="∃" title="Drop a variable, then a formula">∃</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="wff-output-header mt-4">
+                    <h3>WFF Output</h3>
+                    <div class="flex items-center">
+                         <div class="wff-zoom-controls">
+                            <button id="zoom-out-wff" title="Decrease size">-</button>
+                            <button id="zoom-in-wff" title="Increase size">+</button>
+                        </div>
+                        <div id="trash-can-drop-area" class="ml-2" title="Drag WFF from tray here to delete">🗑️</div>
+                    </div>
+                </div>
+                <div id="wff-output-tray" title="Drag WFFs here to construct, or to proof area.">
+                </div>
+            </div>
+
+            <div id="proof-area" class="game-section">
+                <h2>Proof</h2>
+                <div id="proof-problem-info">
+                    <!-- Problem headers will be injected here by JS -->
+                </div>
+                <div id="subproof-goal-display-container" class="mt-2"></div>
+                <div id="feedback-container">
+                    <button id="prev-feedback" class="feedback-nav-button">&lt;</button>
+                    <div id="proof-feedback"></div>
+                    <button id="next-feedback" class="feedback-nav-button">&gt;</button>
+                </div>
+                <ol id="proof-lines">
+                    </ol>
+            </div>
+
+            <div id="rules-and-subproofs-column" class="game-section">
+                <div id="subproofs-area">
+                    <h2>Subproofs</h2>
+                    <div class="rule-item" data-rule="CI" data-premises="1">
+                        Conditional Introduction (→I)
+                        <div class="rule-slots">
+                            <div class="drop-slot" data-premise-index="0" data-expected-pattern="φ → ψ">Goal (e.g., φ → ψ)</div>
+                        </div>
+                    </div>
+                    <div class="rule-item" data-rule="UI" data-premises="1">
+                        Universal Introduction (∀I)
+                        <div class="rule-slots">
+                            <div class="drop-slot" data-premise-index="0">Goal (e.g., ∀xφx)</div>
+                        </div>
+                    </div>
+                    <div class="rule-item" data-rule="EE" data-premises="2">
+                        Existential Elimination (∃E)
+                        <div class="rule-slots">
+                            <div class="drop-slot" data-premise-index="0">Major Premise (e.g., ∃xφx)</div>
+                             <div class="drop-slot" data-premise-index="1">Subproof Conclusion (e.g., ψ)</div>
+                        </div>
+                    </div>
+                </div>
+                <div id="inference-rules-area" class="mt-4">
+                    <h2>Inference Rules</h2>
+                    <div class="rule-item" data-rule="MP" data-premises="2">
+                        Modus Ponens (MP / →E)
+                        <div class="rule-slots">
+                            <div class="drop-slot" data-premise-index="0" data-expected-pattern="φ → ψ">Premise 1 (e.g., φ → ψ)</div>
+                            <div class="drop-slot" data-premise-index="1" data-expected-pattern="φ">Premise 2 (e.g., φ)</div>
+                        </div>
+                    </div>
+                    <div class="rule-item" data-rule="MT" data-premises="2">
+                        Modus Tollens (MT)
+                        <div class="rule-slots">
+                            <div class="drop-slot" data-premise-index="0" data-expected-pattern="φ → ψ">Premise 1 (e.g., φ → ψ)</div>
+                            <div class="drop-slot" data-premise-index="1" data-expected-pattern="~ψ">Premise 2 (e.g., ~ψ)</div>
+                        </div>
+                    </div>
+                    <div class="rule-item" data-rule="AndI" data-premises="2">
+                        And Introduction (∧I)
+                         <div class="rule-slots">
+                            <div class="drop-slot" data-premise-index="0">Premise 1 (e.g., φ)</div>
+                            <div class="drop-slot" data-premise-index="1">Premise 2 (e.g., ψ)</div>
+                        </div>
+                    </div>
+                    <div class="rule-item" data-rule="AndE" data-premises="1">
+                        And Elimination (∧E)
+                        <div class="rule-slots">
+                            <div class="drop-slot" data-premise-index="0" data-expected-pattern="φ ∧ ψ">Premise (e.g., φ ∧ ψ)</div>
+                            </div>
+                    </div>
+                    <!-- **NEW:** Updated UI for Existential Introduction -->
+                    <div class="rule-item" data-rule="EI" data-premises="2"> 
+                        Existential Introduction (∃I)
+                         <div class="rule-slots">
+                            <div class="drop-slot" data-premise-index="0">Formula (e.g., F(a))</div>
+                            <div class="drop-slot" data-premise-index="1">Variable to Generalize (e.g., x)</div>
+                        </div>
+                    </div>
+                     <div class="rule-item" data-rule="DN" data-premises="1">
+                        Double Negation (DN)
+                        <div class="rule-slots">
+                            <div class="drop-slot" data-premise-index="0" data-expected-pattern="~~φ or φ">Premise (e.g., ~~φ or φ)</div>
+                        </div>
+                    </div>
+                    <div class="rule-item" data-rule="Reiteration" data-premises="1">
+                        Reiteration (Re)
+                        <div class="rule-slots">
+                            <div class="drop-slot" data-premise-index="0">Line to Reiterate</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // --- Constants and Global State ---
+    const DRAG_DATA_TYPE = 'application/x-nd-drag-data';
+    let gameWrapper, wffOutputTray, draggableVariables, connectiveHotspots,
+        trashCanDropArea, 
+        ruleItems, proofList, proofFeedbackDiv, subGoalDisplayContainer, gameTitle,
+        prevFeedbackBtn, nextFeedbackBtn, zoomInWffBtn, zoomOutWffBtn;
+
+    let firstOperandWFF = null; 
+    let waitingConnectiveWFF = null; 
+    let draggedElementForRemoval = null; 
+
+    let nextLineNumberGlobal = 1;
+    let currentScopeLevel = 0;
+    let subGoalStack = []; 
+    let premises = []; 
+    let goalFormula = "";
+    let currentProblem = {};
+
+    // Feedback and Zoom State
+    let feedbackHistory = [];
+    let currentFeedbackIndex = -1;
+    let wffTrayFontSize = 2.4; // **NEW**: Default size (0.8rem * 3)
+    const FONT_SIZE_STEP = 0.2;
+    const MIN_FONT_SIZE = 0.6;
+    const MAX_FONT_SIZE = 4.0;
+
+    // --- NEW: Problem Sets Data ---
+    const problemSets = {
+      1: { // Propositional Logic
+        name: "Propositional Logic",
+        problems: [
+          { premises: ["P → Q", "P"], goal: "Q" }, // 1. Modus Ponens
+          { premises: ["P → Q", "~Q"], goal: "~P" }, // 2. Modus Tollens
+          { premises: ["P ∨ Q", "~P"], goal: "Q" }, // 3. Disjunctive Syllogism
+          { premises: ["P → Q", "Q → R"], goal: "P → R" }, // 4. Hypothetical Syllogism
+          { premises: ["P", "Q"], goal: "P ∧ Q" }, // 5. Conjunction Intro
+          { premises: ["P ∧ Q"], goal: "P" }, // 6. Conjunction Elim
+          { premises: ["P"], goal: "P ∨ Q" }, // 7. Disjunction Intro
+          { premises: ["(P ∧ Q) → R", "P", "Q"], goal: "R" }, // 8.
+          { premises: ["P → (Q → R)", "P ∧ Q"], goal: "R" }, // 9.
+          { premises: ["~P → ~Q", "Q"], goal: "P" } // 10.
+        ]
+      },
+      2: { // First-Order Logic
+        name: "First-Order Logic",
+        problems: [
+          { premises: ["∀x(F(x) → G(x))", "∃x(F(x))"], goal: "∃x(G(x))" }, // **CHANGED** 1. Classic ∃E
+          { premises: ["∀x(F(x) ∧ G(x))"], goal: "∀x(G(x) ∧ F(x))" }, // 2. Commutativity
+          { premises: ["∃x(F(x))"], goal: "∃y(F(y))" }, // 3. Variable Swap (needs subproof)
+          { premises: ["∀x(F(x) → G(x))", "∀x(G(x) → H(x))"], goal: "∀x(F(x) → H(x))" }, // 4.
+          { premises: ["∃x(F(x) ∧ G(x))"], goal: "∃x(F(x)) ∧ ∃x(G(x))" }, // 5.
+          { premises: ["∀x(F(x)) ∨ ∀x(G(x))"], goal: "∀x(F(x) ∨ G(x))" }, // 6.
+          { premises: ["~∃x(F(x))"], goal: "∀x(~F(x))" }, // 7. Quantifier Negation
+          { premises: ["∀x(F(x) → G(x))", "∃x(F(x))"], goal: "∃x(G(x))" }, // 8. (Same as 1)
+          { premises: ["∃x(∀y(F(x,y)))"], goal: "∀y(∃x(F(x,y)))" }, // 9.
+          { premises: ["∀x(P(x) → Q)", "∃x(P(x))"], goal: "Q" } // 10. Mixed
+        ]
+      }
+    };
+
+
+    // --- NEW: Logic Parser (AST) ---
+    const LogicParser = (() => {
+        const operators = {
+            '~': { prec: 4, assoc: 'right' },
+            '∧': { prec: 3, assoc: 'left' },
+            '∨': { prec: 2, assoc: 'left' },
+            '→': { prec: 1, assoc: 'right' },
+            '↔': { prec: 0, assoc: 'right' },
+        };
+
+        function tokenize(text) {
+            // Updated regex to include FOL tokens
+            const regex = /\s*([PQRSFGHxyz]|\(|\)|~|∧|∨|→|↔|∀|∃|,)\s*/g;
+            return text.replace(regex, ' $1 ').trim().split(/\s+/).filter(t => t.length > 0);
+        }
+        
+        // --- Recursive Descent Parser ---
+        let tokens = [];
+        let pos = 0;
+
+        function peek() { return tokens[pos]; }
+        function consume() { return tokens[pos++]; }
+        function match(expected) {
+            if (peek() === expected) {
+                return consume();
+            }
+            throw new Error(`Expected '${expected}' but found '${peek()}'`);
+        }
+
+        function parsePrimary() {
+            const token = peek();
+            if (token === '(') {
+                consume(); // Eat '('
+                const expr = parseExpression(0);
+                match(')');
+                return expr;
+            }
+            if (/^[PQRS]$/.test(token)) {
+                return { type: 'atomic', value: consume() };
+            }
+            if (/^[FGH]$/.test(token)) {
+                const name = consume();
+                let args = [];
+                if (peek() === '(') {
+                    consume(); // Eat '('
+                    if(peek() !== ')') {
+                        args.push({ type: 'variable', value: consume() });
+                        while (peek() === ',') {
+                            consume(); // Eat ','
+                            args.push({ type: 'variable', value: consume() });
+                        }
+                    }
+                    match(')');
+                }
+                return { type: 'predicate', name, args };
+            }
+             if (/^[xyz]$/.test(token)) {
+                return { type: 'variable', value: consume() };
+            }
+            if(token === '~') {
+                consume();
+                return {type: 'negation', operand: parseExpression(operators['~'].prec) }
+            }
+            if(token === '∀' || token === '∃') {
+                const quantifier = consume();
+                const variable = consume();
+                const formula = parseExpression(operators['~'].prec); // Quantifiers bind tightly
+                 return { type: 'quantifier', quantifier, variable, formula };
+            }
+            throw new Error(`Unexpected token at start of expression: ${token}`);
+        }
+
+        function parseExpression(precedence) {
+            let left = parsePrimary();
+            while(pos < tokens.length) {
+                const token = peek();
+                if(operators[token] && operators[token].prec >= precedence) {
+                    const op = operators[token];
+                    consume();
+                    const right = parseExpression(op.assoc === 'left' ? op.prec + 1 : op.prec);
+                    left = { type: 'binary', operator: token, left, right };
+                } else {
+                    break;
+                }
+            }
+            return left;
+        }
+
+        function fromAst(ast) {
+             if (!ast) return '';
+             switch (ast.type) {
+                case 'atomic':
+                case 'variable':
+                    return ast.value;
+                case 'predicate':
+                    if (ast.args.length === 0) return ast.name;
+                    return `${ast.name}(${ast.args.map(fromAst).join(', ')})`;
+                case 'negation':
+                    const operandStr = fromAst(ast.operand);
+                    if (ast.operand.type === 'atomic' || ast.operand.type === 'predicate') {
+                         return `~${operandStr}`;
+                    }
+                    return `~(${operandStr})`;
+                case 'binary':
+                    const left = fromAst(ast.left);
+                    const right = fromAst(ast.right);
+                    return `(${left} ${ast.operator} ${right})`;
+                 case 'quantifier':
+                    const formulaStr = fromAst(ast.formula);
+                    if (ast.formula.type === 'binary') {
+                        return `${ast.quantifier}${ast.variable}(${formulaStr})`;
+                    }
+                    return `${ast.quantifier}${ast.variable}${formulaStr}`;
+                default:
+                    throw new Error(`Unknown AST node type: ${ast.type}`);
+             }
+        }
+        
+        function areEqual(ast1, ast2) {
+            if (!ast1 && !ast2) return true;
+            if (!ast1 || !ast2 || ast1.type !== ast2.type) return false;
+            
+            switch (ast1.type) {
+                case 'atomic':
+                case 'variable':
+                    return ast1.value === ast2.value;
+                case 'predicate':
+                     if (ast1.name !== ast2.name || ast1.args.length !== ast2.args.length) return false;
+                     for(let i = 0; i < ast1.args.length; i++) {
+                         if (!areEqual(ast1.args[i], ast2.args[i])) return false;
+                     }
+                     return true;
+                case 'negation':
+                    return areEqual(ast1.operand, ast2.operand);
+                case 'binary':
+                    return ast1.operator === ast2.operator && 
+                           areEqual(ast1.left, ast2.left) &&
+                           areEqual(ast1.right, ast2.right);
+                 case 'quantifier':
+                    return ast1.quantifier === ast2.quantifier &&
+                           ast1.variable === ast2.variable &&
+                           areEqual(ast1.formula, ast2.formula);
+                default:
+                    return false;
+            }
+        }
+
+        return {
+            textToAst: (text) => {
+                if (typeof text !== 'string') {
+                    console.error("Parser Error: Input is not a string.", text);
+                    return null;
+                }
+                try { 
+                    tokens = tokenize(text);
+                    pos = 0;
+                    return parseExpression(0); 
+                } 
+                catch (e) { 
+                    console.error("Parsing Error:", e.message, "for formula:", text); 
+                    return null; 
+                }
+            },
+            astToText: (ast) => {
+                 try { return fromAst(ast); } 
+                 catch (e) { console.error("AST-to-Text Error:", e.message, "for ast:", ast); return ''; }
+            },
+            areAstsEqual: areEqual,
+            tokenize: tokenize // Expose tokenize for rendering
+        };
+    })();
+    // --- END Logic Parser ---
+
+
+    // --- Layout and Scaling ---
+    function updateLayout(wrapperId = 'game-wrapper', targetAspectRatio = 16 / 9, rootFontSizeReferenceWidth = 120) {
+        const wrapper = document.getElementById(wrapperId);
+        if (!wrapper) { console.error(`Wrapper element with ID "${wrapperId}" not found.`); return; }
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        const availableHeight = viewportHeight; const availableWidth = viewportWidth;
+        let wrapperWidth, wrapperHeight;
+        if (availableWidth / availableHeight > targetAspectRatio) {
+            wrapperHeight = availableHeight * 0.98; 
+            wrapperWidth = wrapperHeight * targetAspectRatio;
+        } else {
+            wrapperWidth = availableWidth * 0.98; 
+            wrapperHeight = wrapperWidth / targetAspectRatio;
+        }
+        wrapperWidth = Math.max(wrapperWidth, 320 * targetAspectRatio); 
+        wrapperHeight = Math.max(wrapperHeight, 320); 
+        wrapper.style.width = `${wrapperWidth}px`;
+        wrapper.style.height = `${wrapperHeight}px`;
+        const rootFontSize = (wrapperWidth / rootFontSizeReferenceWidth) * 1; 
+        document.documentElement.style.fontSize = `${rootFontSize}px`;
+    }
+
+    // --- Drag Data Utilities ---
+    function setDragData(event, dataObject) {
+        try {
+            const jsonDataString = JSON.stringify(dataObject);
+            event.dataTransfer.setData(DRAG_DATA_TYPE, jsonDataString);
+            event.dataTransfer.effectAllowed = 'copyMove';
+        } catch (err) { console.error("Error in setDragData:", err, dataObject); }
+    }
+
+    function getDragData(event) {
+        const jsonDataString = event.dataTransfer.getData(DRAG_DATA_TYPE);
+        if (jsonDataString) {
+            try { return JSON.parse(jsonDataString); }
+            catch (err) { console.error("Error parsing drag data:", err, "Raw:", jsonDataString); return null; }
+        }
+        return null;
+    }
+
+    // --- Generic Drag Event Handler Creators ---
+    function createDragOverHandler(targetSelector, dragOverClass, allowedDataType = DRAG_DATA_TYPE) {
+        return function(e) {
+            if (e.dataTransfer.types.includes(allowedDataType)) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy'; 
+                const targetElement = e.target.closest(targetSelector) || (this.matches && this.matches(targetSelector) ? this : null);
+                if (targetElement) targetElement.classList.add(dragOverClass);
+            } else { 
+                e.dataTransfer.dropEffect = 'none'; 
+            }
+        };
+    }
+
+    function createDragLeaveHandler(targetSelector, dragOverClass) {
+        return function(e) {
+            const targetElement = e.target.closest(targetSelector) || (this.matches && this.matches(targetSelector) ? this : null);
+            if (targetElement) targetElement.classList.remove(dragOverClass);
+        };
+    }
+
+    // --- Initialization ---
+    function initGame() {
+        // Cache DOM elements
+        gameWrapper = document.getElementById('game-wrapper');
+        wffOutputTray = document.getElementById('wff-output-tray');
+        draggableVariables = document.querySelectorAll('.draggable-var');
+        connectiveHotspots = document.querySelectorAll('.connective-hotspot');
+        trashCanDropArea = document.getElementById('trash-can-drop-area'); 
+        ruleItems = document.querySelectorAll('.rule-item'); 
+        proofList = document.getElementById('proof-lines');
+        proofFeedbackDiv = document.getElementById('proof-feedback');
+        subGoalDisplayContainer = document.getElementById('subproof-goal-display-container');
+        gameTitle = document.getElementById('game-title');
+        prevFeedbackBtn = document.getElementById('prev-feedback');
+        nextFeedbackBtn = document.getElementById('next-feedback');
+        zoomInWffBtn = document.getElementById('zoom-in-wff');
+        zoomOutWffBtn = document.getElementById('zoom-out-wff');
+
+        // Add event listeners
+        draggableVariables.forEach(v => {
+            v.addEventListener('dragstart', handleWffDragStart);
+            v.addEventListener('dragend', handleGenericDragEnd);
+        });
+        connectiveHotspots.forEach(spot => {
+            spot.addEventListener('dragover', createDragOverHandler('.connective-hotspot', 'drag-over'));
+            spot.addEventListener('dragleave', createDragLeaveHandler('.connective-hotspot', 'drag-over'));
+            spot.addEventListener('drop', handleDropOnConnectiveHotspot);
+            spot.dataset.originalText = spot.textContent; 
+        });
+
+        wffOutputTray.addEventListener('dragstart', handleWffDragStart); 
+        wffOutputTray.addEventListener('dragend', handleGenericDragEnd);
+        wffOutputTray.addEventListener('dragover', createDragOverHandler('#wff-output-tray', 'drag-over-tray'));
+        wffOutputTray.addEventListener('dragleave', createDragLeaveHandler('#wff-output-tray', 'drag-over-tray'));
+        wffOutputTray.addEventListener('drop', handleDropOnWffOutputTray);
+
+        if(trashCanDropArea) {
+            trashCanDropArea.addEventListener('dragover', createDragOverHandler('#trash-can-drop-area', 'trash-can-drag-over'));
+            trashCanDropArea.addEventListener('dragleave', createDragLeaveHandler('#trash-can-drop-area', 'trash-can-drag-over'));
+            trashCanDropArea.addEventListener('drop', handleDropOnTrashCan);
+        }
+
+        proofList.addEventListener('dragover', createDragOverHandler('ol#proof-lines', 'drag-over-proof'));
+        proofList.addEventListener('dragleave', createDragLeaveHandler('ol#proof-lines', 'drag-over-proof'));
+        proofList.addEventListener('drop', handleDropOnProofArea);
+        proofList.addEventListener('click', handleSubproofToggle); 
+
+        ruleItems.forEach(item => {
+            item.addEventListener('click', handleRuleItemClick);
+            item.addEventListener('dragenter', handleRuleItemDragEnter);
+            item.addEventListener('dragleave', handleRuleItemDragLeave);
+            item.querySelectorAll('.drop-slot').forEach(slot => {
+                slot.addEventListener('dragover', createDragOverHandler('.drop-slot', 'drag-over'));
+                slot.addEventListener('dragleave', createDragLeaveHandler('.drop-slot', 'drag-over'));
+                slot.addEventListener('drop', (e) => handleDropOnRuleSlot(e, item));
+                slot.dataset.placeholder = slot.textContent; 
+            });
+        });
+        
+        document.querySelectorAll('.accordion-header').forEach(header => {
+            header.addEventListener('click', () => {
+                const content = header.nextElementSibling;
+                header.classList.toggle('closed');
+                content.classList.toggle('hidden');
+            });
+        });
+
+        prevFeedbackBtn.addEventListener('click', showPreviousFeedback);
+        nextFeedbackBtn.addEventListener('click', showNextFeedback);
+        zoomInWffBtn.addEventListener('click', () => changeWffTrayZoom(1));
+        zoomOutWffBtn.addEventListener('click', () => changeWffTrayZoom(-1));
+
+        // **NEW**: Add zoom to point listener
+        gameWrapper.addEventListener('dblclick', handleWrapperZoom);
+
+        setupProofLineDragging(); 
+
+        // **NEW**: Load problem from URL or default
+        const params = getUrlParams();
+        loadProblem(params.set || 2, params.problem || 1);
+        
+        console.log("Natural Deduction Contraption Initialized");
+        window.addEventListener('resize', () => updateLayout('game-wrapper', 16 / 9, 100));
+    }
+    
+    // --- MODIFIED: Drag-based Hover and Click Rule Logic ---
+    function handleRuleItemDragEnter(event) {
+        const item = event.currentTarget;
+        item.dataset.hoverTimer = setTimeout(() => {
+            item.classList.add('active');
+        }, 500);
+    }
+
+    function handleRuleItemDragLeave(event) {
+        const item = event.currentTarget;
+        clearTimeout(item.dataset.hoverTimer);
+    }
+
+    function handleRuleItemClick(event) {
+        if (event.target && event.target.closest('.drop-slot')) {
+            return;
+        }
+        
+        const clickedItem = event.currentTarget;
+        const isAlreadyActive = clickedItem.classList.contains('active');
+        
+        ruleItems.forEach(item => {
+            item.classList.remove('active');
+        });
+        
+        if (!isAlreadyActive) {
+            clickedItem.classList.add('active');
+        }
+    }
+
+
+    // --- WFF Construction Drag/Drop Logic ---
+    function handleWffDragStart(e) {
+        e.stopPropagation(); // Stop bubbling immediately!
+    
+        const target = e.target.closest('.draggable-var, .formula');
+        if (!target) return;
+    
+        let symbol = target.dataset.symbol;
+        let type = target.dataset.type;
+        let formula = target.dataset.formula || target.textContent.trim();
+        let sourceType = type;
+        
+        if (target.classList.contains('formula')) {
+             sourceType = 'wff-tray-formula';
+        }
+    
+        let elementId = target.id;
+        if (!elementId) {
+            target.id = `wff-temp-${Date.now()}`;
+            elementId = target.id;
+        }
+    
+        if (!formula) {
+            console.error("WFF Drag Start: No formula/symbol data on target.");
+            e.preventDefault();
+            return;
+        }
+    
+        setDragData(e, { sourceType: sourceType, formula: formula, elementId: elementId, symbol: symbol });
+        target.classList.add('dragging');
+    }
+
+    function handleGenericDragEnd(e) { 
+        if (e.currentTarget) e.currentTarget.classList.remove('dragging'); 
+        // Also remove drag-over from any potential drop targets
+        document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+    }
+    
+    function handleDropOnConnectiveHotspot(e) {
+        e.preventDefault();
+        const targetHotspot = e.target.closest('.connective-hotspot');
+        if (!targetHotspot) return;
+        targetHotspot.classList.remove('drag-over');
+        const data = getDragData(e);
+        if (!data || !data.formula) { console.error("Drop on Connective: No valid drag data found."); return; }
+        
+        const { formula: droppedFormula, elementId: droppedElementId, sourceType: droppedSourceType } = data;
+        const connective = targetHotspot.dataset.connective;
+
+        // --- Handle Quantifiers ---
+        if (connective === '∀' || connective === '∃') {
+            if (!firstOperandWFF) { // Waiting for a variable
+                if (droppedSourceType !== 'fol-variable') {
+                    showFeedback("Quantifiers require a variable first (x, y, or z).", true);
+                    return;
+                }
+                firstOperandWFF = droppedFormula;
+                waitingConnectiveWFF = connective;
+                targetHotspot.classList.add('waiting');
+                targetHotspot.textContent = `${connective}${droppedFormula}(?)`;
+            } else { // Already have variable, waiting for formula
+                 if (waitingConnectiveWFF === connective) {
+                     const ast = LogicParser.textToAst(droppedFormula);
+                     if (!ast) { showFeedback("Invalid formula dropped on quantifier.", true); return; }
+                     const resultAst = { type: 'quantifier', quantifier: connective, variable: firstOperandWFF, formula: ast };
+                     createDraggableWffInTray(LogicParser.astToText(resultAst));
+                     clearWffInProgress();
+                 } else { showFeedback("Quantifier mismatch.", true); clearWffInProgress(); }
+            }
+            return;
+        }
+
+        // --- Handle Propositional Connectives ---
+        const droppedAst = LogicParser.textToAst(droppedFormula);
+        if (!droppedAst) { showFeedback("Invalid formula dropped.", true); return; }
+
+        if (connective === '~') { 
+            const newAst = { type: 'negation', operand: droppedAst };
+            createDraggableWffInTray(LogicParser.astToText(newAst));
+            clearWffInProgress(); 
+        } else { 
+            if (!firstOperandWFF) {
+                firstOperandWFF = droppedFormula; 
+                waitingConnectiveWFF = connective;
+                targetHotspot.classList.add('waiting');
+                targetHotspot.textContent = `${LogicParser.astToText(droppedAst)} ${connective} ?`;
+            } else {
+                if (waitingConnectiveWFF === connective) { 
+                    const firstAst = LogicParser.textToAst(firstOperandWFF);
+                    if (!firstAst) { showFeedback("Invalid first formula.", true); clearWffInProgress(); return; }
+                    const newAst = { type: 'binary', operator: connective, left: firstAst, right: droppedAst };
+                    createDraggableWffInTray(LogicParser.astToText(newAst));
+                    clearWffInProgress(); 
+                } else { showFeedback("WFF Error: Connective mismatch.", true); clearWffInProgress(); }
+            }
+        }
+        if (droppedSourceType === 'wff-tray-formula' && droppedElementId) removeWffFromTrayById(droppedElementId);
+    }
+    
+    function handleDropOnWffOutputTray(e) {
+        e.preventDefault();
+        const targetElement = e.target.closest('#wff-output-tray') || wffOutputTray;
+        targetElement.classList.remove('drag-over-tray');
+        const data = getDragData(e);
+        if (!data || !data.formula) { return; }
+
+        // Handle dropping on an existing formula (for predicate application)
+        const targetFormulaDiv = e.target.closest('.formula');
+        if (targetFormulaDiv && targetFormulaDiv.parentElement === wffOutputTray) {
+             targetFormulaDiv.classList.remove('drag-over');
+             if (data.sourceType === 'fol-variable') {
+                const targetAst = LogicParser.textToAst(targetFormulaDiv.dataset.formula);
+                if (targetAst && targetAst.type === 'predicate') {
+                    // **FIX**: Create new formula but leave original F
+                    const newArgs = [...targetAst.args, { type: 'variable', value: data.symbol }];
+                    const newAst = { ...targetAst, args: newArgs };
+                    createDraggableWffInTray(LogicParser.astToText(newAst));
+                } else {
+                     showFeedback("Can only drop FOL variables onto predicates.", true);
+                }
+                return; // Stop processing here
+             }
+        }
+
+
+        // Handle dropping a new item into the tray
+        if (['prop-variable', 'predicate', 'fol-variable'].includes(data.sourceType)) {
+             createDraggableWffInTray(data.formula);
+        } else if (data.sourceType === 'wff-tray-formula') {
+            // This case handles reordering items in the tray.
+            // The dragged item is removed on 'drop' on a valid target, so nothing to do here.
+        }
+    }
+
+    function handleDropOnTrashCan(e) {
+        e.preventDefault();
+        const targetTrashCan = e.target.closest('#trash-can-drop-area');
+        if(targetTrashCan) targetTrashCan.classList.remove('trash-can-drag-over');
+
+        const data = getDragData(e);
+        if (data && data.sourceType === 'wff-tray-formula' && data.elementId && data.formula) {
+            const formulaTextOfTrashedItem = data.formula;
+            removeWffFromTrayById(data.elementId);
+            showFeedback(`WFF "${formulaTextOfTrashedItem}" deleted from tray.`, false);
+        }
+        draggedElementForRemoval = null; 
+    }
+    
+    // --- MODIFIED: Renders formula with interactive variables ---
+    function renderFormulaWithDraggableVars(formulaString) {
+        const fragment = document.createDocumentFragment();
+        // Use regex to split on operators, parens, commas, and variables, keeping them.
+        const parts = formulaString.split(/([(),~∧∨→↔∀∃])|([xyz])/).filter(p => p);
+        
+        parts.forEach(part => {
+            if (/^[xyz]$/.test(part)) {
+                const span = document.createElement('span');
+                span.className = 'draggable-var fol-variable'; // This class is for styling consistency
+                span.draggable = true;
+                span.dataset.type = 'fol-variable';
+                span.dataset.symbol = part;
+                span.textContent = part;
+                // Drag listeners are now handled by delegation on the parent tray
+                fragment.appendChild(span);
+            } else {
+                fragment.appendChild(document.createTextNode(part));
+            }
+        });
+        return fragment;
+    }
+
+    function createDraggableWffInTray(formula) {
+        if (!formula || formula.trim() === "") return;
+        const item = document.createElement('div');
+        item.className = 'formula'; 
+        item.innerHTML = ''; // Clear it first
+        item.appendChild(renderFormulaWithDraggableVars(formula));
+        
+        item.dataset.formula = formula; 
+        item.id = `wff-output-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+        item.draggable = true;
+        // The main drag listeners are delegated to the tray now
+        
+        // Add drop listeners for predicate application
+        item.addEventListener('dragover', createDragOverHandler('.formula', 'drag-over'));
+        item.addEventListener('dragleave', createDragLeaveHandler('.formula', 'drag-over'));
+        
+        wffOutputTray.appendChild(item); 
+    }
+
+    function clearWffInProgress() {
+        firstOperandWFF = null;
+        if (waitingConnectiveWFF && connectiveHotspots) {
+            connectiveHotspots.forEach(spot => {
+                if (spot.classList.contains('waiting')) { 
+                    spot.classList.remove('waiting');
+                    spot.textContent = spot.dataset.originalText || spot.dataset.connective; 
+                }
+            });
+        }
+        waitingConnectiveWFF = null;
+    }
+    
+    function setupProofLineDragging() {
+        // This function now only needs one delegated listener on the proof list
+        proofList.addEventListener('dragstart', handleDragStartProofLine);
+        proofList.addEventListener('dragend', handleGenericDragEnd);
+    }
+
+    // This function is no longer needed because of event delegation
+    // function makeFormulaDraggable(el) {}
+
+    function handleDragStartProofLine(e) {
+        e.stopPropagation();
+        if (!e.target || typeof e.target.textContent === 'undefined') { e.preventDefault(); return; }
+        const lineItem = e.target.closest('li[data-line-number]');
+        if (!lineItem) { return; }
+
+        const { lineNumber: lineId, scopeLevel: scopeStr, isProven: isProvenStr } = lineItem.dataset;
+        const scope = parseInt(scopeStr);
+        if (!lineId || isNaN(scope)) { console.error("Missing lineId/scope."); e.preventDefault(); return; }
+        if (isProvenStr !== 'true' && !isAssumption(lineItem)) { 
+            showFeedback("Cannot use unproven 'Show' line as premise.", true); e.preventDefault(); return;
+        }
+        
+        const formulaDiv = lineItem.querySelector('.formula');
+        const formulaText = formulaDiv.dataset.formula;
+        setDragData(e, {
+            sourceType: 'proof-line-formula', formula: formulaText.trim(),
+            lineId: lineId, scopeLevel: scope,
+            elementId: lineItem.id || (lineItem.id = `proofline-${lineId.replace('.', '-')}`) 
+        });
+        formulaDiv.classList.add('dragging');
+    }
+    
+    function handleDropOnProofArea(e) {
+        e.preventDefault();
+        const targetProofList = e.target.closest('ol#proof-lines') || proofList;
+        targetProofList.classList.remove('drag-over-proof');
+        
+        const data = getDragData(e);
+        if (!data || !data.formula) { return; }
+
+        const targetLi = e.target.closest('li[data-line-number]'); 
+        const formulaToProcess = data.formula.trim();
+        const elementIdToProcess = data.elementId;
+
+        // If from constructor (tray or button) and dropped on the main proof area...
+        if ((data.sourceType.includes('variable') || data.sourceType.includes('predicate')) && !targetLi) { 
+            startProofByContradiction(formulaToProcess);
+            if (data.sourceType === 'wff-tray-formula') { 
+                removeWffFromTrayById(elementIdToProcess); 
+            }
+        } else if (data.sourceType === 'proof-line-formula') {
+            const { formula: draggedFormulaText, lineId: draggedLineId, scopeLevel: draggedScope } = data;
+            if (targetLi) { 
+                const targetFormula = targetLi.querySelector('.formula').dataset.formula;
+                const targetLineId = targetLi.dataset.lineNumber;
+                const targetScope = parseInt(targetLi.dataset.scopeLevel);
+
+                const activeSubProof = subGoalStack.length > 0 ? subGoalStack[subGoalStack.length - 1] : null;
+                if (activeSubProof && activeSubProof.type === "RAA" && 
+                    draggedScope === activeSubProof.scope && targetScope === activeSubProof.scope) {
+                    if (isNegationOf(draggedFormulaText, targetFormula)) {
+                        dischargeRAA(activeSubProof, draggedLineId, targetLineId); 
+                        return; 
+                    }
+                } else {
+                     showFeedback("Cannot form contradiction here or not in RAA.", true);
+                }
+            } else { 
+                if (draggedScope <= currentScopeLevel) addProofLine(draggedFormulaText, `Re ${draggedLineId}`, currentScopeLevel);
+                else showFeedback("Reiteration Error: Cannot reiterate from inner scope.", true);
+            }
+        }
+    }
+
+    function removeWffFromTrayById(elementId) {
+        if (!elementId) { return; }
+        const elToRemove = document.getElementById(elementId);
+        if (elToRemove && elToRemove.parentNode === wffOutputTray) {
+            wffOutputTray.removeChild(elToRemove);
+            if (draggedElementForRemoval && draggedElementForRemoval.id === elementId) {
+                draggedElementForRemoval = null;
+            }
+        }
+    }
+    
+    function getRuleSlotData(ruleItemElement) {
+        const slots = ruleItemElement.querySelectorAll('.drop-slot');
+        return Array.from(slots).map(slot => ({
+            formula: slot.dataset.formula, line: slot.dataset.line, 
+            source: slot.dataset.source, elementId: slot.dataset.elementId 
+        }));
+    }
+
+    function validateRuleSlots(ruleItemElement, expectedPremises) {
+        const slotsData = getRuleSlotData(ruleItemElement);
+        const filledSlots = slotsData.filter(s => s.formula);
+        if (filledSlots.length < expectedPremises) { return null; }
+        return slotsData; 
+    }
+
+    function handleDropOnRuleSlot(e, ruleItemElement) {
+        e.preventDefault();
+        const targetSlot = e.target.closest('.drop-slot');
+        if (!targetSlot) return;
+        targetSlot.classList.remove('drag-over');
+        const data = getDragData(e);
+        if (!data || !data.formula) { targetSlot.textContent = "Drop Error!"; setTimeout(() => clearSlot(targetSlot), 1500); return; }
+        const { formula: droppedFormula, lineId: droppedLineId, scopeLevel: droppedScopeNum, elementId: droppedElementId } = data;
+        const droppedScope = data.sourceType === 'proof-line-formula' ? droppedScopeNum : -1;
+
+        if (data.sourceType === 'proof-line-formula' && droppedScope > currentScopeLevel) {
+            showFeedback("Rule Error: Cannot use line from inner, closed subproof.", true); clearSlot(targetSlot); return;
+        }
+
+        // **NEW: Drop Slot Validation**
+        const expectedPattern = targetSlot.dataset.expectedPattern;
+        if (expectedPattern) {
+            const droppedAst = LogicParser.textToAst(droppedFormula);
+            if (!droppedAst) {
+                showFeedback(`Invalid formula dropped: "${droppedFormula}"`, true);
+                clearSlot(targetSlot);
+                return;
+            }
+
+            let isValid = false;
+            switch(expectedPattern) {
+                case 'φ → ψ':
+                    if (droppedAst.type === 'binary' && droppedAst.operator === '→') isValid = true;
+                    else showFeedback("Invalid drop. Expected a conditional (e.g., A → B).", true);
+                    break;
+                case '~ψ':
+                    if (droppedAst.type === 'negation') isValid = true;
+                    else showFeedback("Invalid drop. Expected a negation (e.g., ~A).", true);
+                    break;
+                case 'φ ∧ ψ':
+                    if (droppedAst.type === 'binary' && droppedAst.operator === '∧') isValid = true;
+                    else showFeedback("Invalid drop. Expected a conjunction (e.g., A ∧ B).", true);
+                    break;
+                default:
+                    isValid = true; // No specific pattern to check
+            }
+            if (!isValid) {
+                clearSlot(targetSlot);
+                return;
+            }
+        }
+
+
+        targetSlot.dataset.source = data.sourceType; targetSlot.dataset.formula = droppedFormula;
+        if (droppedLineId) targetSlot.dataset.line = droppedLineId; else delete targetSlot.dataset.line;
+        if (droppedElementId) targetSlot.dataset.elementId = droppedElementId; 
+        targetSlot.textContent = droppedLineId ? `${droppedLineId}: ${droppedFormula}` : droppedFormula;
+        targetSlot.classList.remove('text-slate-400', 'italic'); 
+
+        const ruleName = ruleItemElement.dataset.rule;
+        let ruleApplicationResult = null;
+        let autoAppliedManually = false; 
+
+        if (ruleName === 'CI') {
+            const ast = LogicParser.textToAst(droppedFormula);
+            if (ast && ast.type === 'binary' && ast.operator === '→') {
+                startConditionalIntroduction(ast);
+                if (data.sourceType === 'wff-tray-formula') { removeWffFromTrayById(droppedElementId); }
+                autoAppliedManually = true;
+            } else {
+                showFeedback("→I Error: Dropped formula must be a conditional (φ → ψ).", true);
+                clearSlot(targetSlot);
+            }
+        } else if (ruleName === "MP") ruleApplicationResult = attemptAutoModusPonens(ruleItemElement);
+        else if (ruleName === "MT") ruleApplicationResult = attemptAutoModusTollens(ruleItemElement);
+        else if (ruleName === "AndI") ruleApplicationResult = attemptAutoAndIntroduction(ruleItemElement);
+        else if (ruleName === "AndE") ruleApplicationResult = attemptAutoAndElimination(ruleItemElement); 
+        else if (ruleName === "EI") ruleApplicationResult = attemptAutoExistentialIntroduction(ruleItemElement); 
+        else if (ruleName === "DN") ruleApplicationResult = attemptAutoDoubleNegation(ruleItemElement);
+        else if (ruleName === "Reiteration" && droppedLineId) { 
+            if (addProofLine(droppedFormula, `Re ${droppedLineId}`, currentScopeLevel)) {
+                autoAppliedManually = true; 
+            }
+        } 
+
+        if (ruleApplicationResult) {
+            const newProofLine = addProofLine(ruleApplicationResult.resultFormula, ruleApplicationResult.justificationText, currentScopeLevel);
+            if (newProofLine) { 
+                ruleApplicationResult.consumedWffIds.forEach(id => removeWffFromTrayById(id));
+                autoAppliedManually = true; 
+            }
+        }
+
+        if (autoAppliedManually) { 
+            clearRuleSlots(ruleItemElement);
+            ruleItemElement.classList.remove('active'); 
+        }
+    }
+    
+    function attemptAutoModusPonens(ruleItemElement) {
+        const slotsData = validateRuleSlots(ruleItemElement, 2);
+        if (!slotsData) return null;
+        const [premise1, premise2] = slotsData;
+        
+        const ast1 = LogicParser.textToAst(premise1.formula);
+        const ast2 = LogicParser.textToAst(premise2.formula);
+
+        // Validation already happened, so we just check the logic
+        if (ast1 && ast2 && LogicParser.areAstsEqual(ast1.left, ast2)) {
+            const consumedWffIds = [];
+            if (premise1.source === 'wff-tray-formula' && premise1.elementId) consumedWffIds.push(premise1.elementId);
+            if (premise2.source === 'wff-tray-formula' && premise2.elementId) consumedWffIds.push(premise2.elementId);
+            return {
+                resultFormula: LogicParser.astToText(ast1.right),
+                justificationText: `MP ${premise1.line || 'WFF'}, ${premise2.line || 'WFF'}`,
+                consumedWffIds: consumedWffIds
+            };
+        }
+        showFeedback("MP Error: The second premise must match the antecedent of the first.", true); return null;
+    }
+
+    function attemptAutoModusTollens(ruleItemElement) {
+        const slotsData = validateRuleSlots(ruleItemElement, 2);
+        if (!slotsData) return null;
+        const [premise1, premise2] = slotsData;
+
+        const ast1 = LogicParser.textToAst(premise1.formula);
+        const ast2 = LogicParser.textToAst(premise2.formula);
+
+        // Validation already happened, we just check the logic
+        if (ast1 && ast2 && LogicParser.areAstsEqual(ast1.right, ast2.operand)) {
+            
+            const consumedWffIds = [];
+            if (premise1.source === 'wff-tray-formula' && premise1.elementId) consumedWffIds.push(premise1.elementId);
+            if (premise2.source === 'wff-tray-formula' && premise2.elementId) consumedWffIds.push(premise2.elementId);
+            
+            const resultAst = { type: 'negation', operand: ast1.left };
+
+            return {
+                resultFormula: LogicParser.astToText(resultAst),
+                justificationText: `MT ${premise1.line || 'WFF'}, ${premise2.line || 'WFF'}`,
+                consumedWffIds: consumedWffIds
+            };
+        }
+        showFeedback("MT Error: The second premise must be the negation of the first's consequent.", true); return null;
+    }
+
+    function attemptAutoAndIntroduction(ruleItemElement) {
+        const slotsData = validateRuleSlots(ruleItemElement, 2);
+        if (!slotsData) return null;
+        const [premiseA, premiseB] = slotsData;
+
+        const astA = LogicParser.textToAst(premiseA.formula);
+        const astB = LogicParser.textToAst(premiseB.formula);
+        if (!astA || !astB) { showFeedback("One of the formulas for ∧I is invalid.", true); return null; }
+
+        const resultAst = { type: 'binary', operator: '∧', left: astA, right: astB };
+
+        const consumedWffIds = [];
+        if (premiseA.source === 'wff-tray-formula' && premiseA.elementId) consumedWffIds.push(premiseA.elementId);
+        if (premiseB.source === 'wff-tray-formula' && premiseB.elementId) consumedWffIds.push(premiseB.elementId);
+        return {
+            resultFormula: LogicParser.astToText(resultAst),
+            justificationText: `∧I ${premiseA.line || 'WFF'}, ${premiseB.line || 'WFF'}`,
+            consumedWffIds: consumedWffIds
+        };
+    }
+
+    function attemptAutoAndElimination(ruleItemElement) {
+        const slotsData = validateRuleSlots(ruleItemElement, 1);
+        if (!slotsData || !slotsData[0].formula) return null; 
+        const conjunctionPremise = slotsData[0];
+        
+        const ast = LogicParser.textToAst(conjunctionPremise.formula);
+        if (!ast || ast.type !== 'binary' || ast.operator !== '∧') {
+            // This check is now redundant due to slot validation, but safe to keep
+            showFeedback("∧E Error: Premise must be a conjunction (φ ∧ ψ).", true); return null;
+        }
+
+        const leftPart = LogicParser.astToText(ast.left);
+        const rightPart = LogicParser.astToText(ast.right);
+
+        const choice = prompt(`From "${conjunctionPremise.formula}", extract:\n1. "${leftPart}" (Left)\n2. "${rightPart}" (Right)`, "1");
+        
+        let resultFormula = null;
+        if (choice === "1") resultFormula = leftPart; 
+        else if (choice === "2") resultFormula = rightPart;
+        else { showFeedback("∧E: No valid choice made.", true); return null; }
+
+        const consumedWffIds = [];
+        if (conjunctionPremise.source === 'wff-tray-formula' && conjunctionPremise.elementId) consumedWffIds.push(conjunctionPremise.elementId);
+        return { resultFormula: resultFormula, justificationText: `∧E ${conjunctionPremise.line || 'WFF'}`, consumedWffIds: consumedWffIds };
+    }
+
+    // **NEW**: Logic for Existential Introduction
+    function attemptAutoExistentialIntroduction(ruleItemElement) {
+        const slotsData = validateRuleSlots(ruleItemElement, 2);
+        if (!slotsData) return null;
+
+        const [formulaPremise, variablePremise] = slotsData;
+        const formulaAst = LogicParser.textToAst(formulaPremise.formula);
+        
+        // The second premise must be a single variable.
+        if (!/^[xyz]$/.test(variablePremise.formula)) {
+            showFeedback("∃I Error: Second premise must be a single variable (x, y, or z).", true);
+            return null;
+        }
+        
+        // For simplicity, we'll assume the user wants to replace *all* instances of a name.
+        // A more advanced version would let the user pick which instance to replace.
+        const nameToReplace = prompt(`In formula "${formulaPremise.formula}", which constant or variable should be replaced by "${variablePremise.formula}"?`);
+        if (!nameToReplace) {
+            showFeedback("∃I Error: No name provided for replacement.", true);
+            return null;
+        }
+        
+        function replaceInAst(ast, from, to) {
+            if (!ast) return null;
+            if (ast.type === 'variable' && ast.value === from) {
+                return { type: 'variable', value: to };
+            }
+            if (ast.type === 'predicate') {
+                const newArgs = ast.args.map(arg => replaceInAst(arg, from, to));
+                return { ...ast, args: newArgs };
+            }
+            if (ast.type === 'negation') {
+                 return { ...ast, operand: replaceInAst(ast.operand, from, to) };
+            }
+            if (ast.type === 'binary') {
+                return { ...ast, left: replaceInAst(ast.left, from, to), right: replaceInAst(ast.right, from, to) };
+            }
+             if (ast.type === 'quantifier') {
+                 if (ast.variable === from) return ast; // Variable is bound, do not replace.
+                 return { ...ast, formula: replaceInAst(ast.formula, from, to) };
+            }
+            return ast;
+        }
+
+        const newFormulaBody = replaceInAst(formulaAst, nameToReplace.trim(), variablePremise.formula);
+        const resultAst = { type: 'quantifier', quantifier: '∃', variable: variablePremise.formula, formula: newFormulaBody };
+        
+        const consumedWffIds = [];
+        if (formulaPremise.source === 'wff-tray-formula' && formulaPremise.elementId) consumedWffIds.push(formulaPremise.elementId);
+        if (variablePremise.source === 'wff-tray-formula' && variablePremise.elementId) consumedWffIds.push(variablePremise.elementId);
+        
+        return {
+            resultFormula: LogicParser.astToText(resultAst),
+            justificationText: `∃I ${formulaPremise.line || 'WFF'}`,
+            consumedWffIds
+        };
+    }
+
+
+    function attemptAutoDoubleNegation(ruleItemElement) {
+        const slotsData = validateRuleSlots(ruleItemElement, 1);
+        if (!slotsData || !slotsData[0].formula) return null;
+        const premise = slotsData[0]; 
+        
+        const ast = LogicParser.textToAst(premise.formula);
+        if (!ast) { showFeedback("Invalid formula for DN.", true); return null; }
+
+        let resultAst;
+        if (ast.type === 'negation' && ast.operand.type === 'negation') {
+            resultAst = ast.operand.operand; // ~~A -> A
+        } else {
+            resultAst = { type: 'negation', operand: { type: 'negation', operand: ast } }; // A -> ~~A
+        }
+
+        const consumedWffIds = [];
+        if (premise.source === 'wff-tray-formula' && premise.elementId) consumedWffIds.push(premise.elementId);
+        return { resultFormula: LogicParser.astToText(resultAst), justificationText: `DN ${premise.line || 'WFF'}`, consumedWffIds: consumedWffIds };
+    }
+
+    // --- Proof Line Management & Subproofs ---
+    function addProofLine(formula, justification, scopeLevel = currentScopeLevel, isAssumptionFlag = false, isShowLineFlag = false) {
+        if (!proofList) return null;
+        const cleanFormula = formula.trim();
+        
+        let formulaForParsing = cleanFormula;
+        if (isShowLineFlag) {
+            formulaForParsing = cleanFormula.replace(/^Show:\s*/i, '');
+        }
+        const formulaAst = LogicParser.textToAst(formulaForParsing);
+
+        if (!isShowLineFlag && !isAssumptionFlag) {
+            // Check for duplicate lines
+            const existingLines = proofList.querySelectorAll(`li[data-scope-level="${scopeLevel}"]`);
+            for (const line of existingLines) {
+                const existingFormulaEl = line.querySelector('.formula');
+                const existingAst = LogicParser.textToAst(existingFormulaEl.dataset.formula || existingFormulaEl.textContent);
+                if (existingAst && formulaAst && LogicParser.areAstsEqual(existingAst, formulaAst) && line.dataset.isProven === 'true') {
+                    showFeedback("This line already exists and is proven in the current scope.", true); return null; 
+                }
+            }
+        }
+        let displayLineStr, dataLineId; 
+        if (scopeLevel === 0) {
+            displayLineStr = `${nextLineNumberGlobal}.`; dataLineId = `${nextLineNumberGlobal}`; nextLineNumberGlobal++;
+        } else {
+            const activeSubProof = subGoalStack[subGoalStack.length - 1];
+            if (!activeSubProof) { console.error("No active subproof!"); return null; }
+            if (typeof activeSubProof.subLineLetterCode === 'undefined') activeSubProof.subLineLetterCode = 97; 
+            const subLetter = String.fromCharCode(activeSubProof.subLineLetterCode++);
+            displayLineStr = `${activeSubProof.parentLineDisplay}.${subLetter}`; dataLineId = displayLineStr;
+        }
+        const listItem = document.createElement('li');
+        Object.assign(listItem.dataset, { 
+            lineNumber: dataLineId, 
+            scopeLevel, 
+            isAssumption: isAssumptionFlag, 
+            isShowLine: isShowLineFlag, 
+            isProven: (!isShowLineFlag && !isAssumptionFlag).toString() 
+        });
+
+        if (isShowLineFlag) {
+            listItem.classList.add('show-line');
+            listItem.dataset.subproofId = `subproof-${dataLineId.replace('.', '-')}`; 
+        }
+        if (isAssumptionFlag && subGoalStack.length > 0) {
+            listItem.classList.add('subproof-assumption');
+            const activeSub = subGoalStack[subGoalStack.length - 1];
+            if (activeSub.subproofId) { 
+                listItem.dataset.parentSubproofId = activeSub.subproofId;
+            }
+        } else if (scopeLevel > 0 && subGoalStack.length > 0 && !isAssumptionFlag && !isShowLineFlag) {
+            const activeSub = subGoalStack[subGoalStack.length - 1];
+            if (activeSub.subproofId) {
+                listItem.dataset.parentSubproofId = activeSub.subproofId;
+            }
+        }
+
+        if (scopeLevel > 0) { listItem.classList.add('subproof-line'); listItem.style.marginLeft = `${scopeLevel * 1.5}rem`; }
+        
+        const formulaDiv = document.createElement('span');
+        formulaDiv.className = 'formula';
+        formulaDiv.dataset.formula = cleanFormula;
+        formulaDiv.appendChild(renderFormulaWithDraggableVars(cleanFormula));
+
+        listItem.innerHTML = `<span class="line-number">${displayLineStr}</span>`;
+        listItem.appendChild(formulaDiv);
+        listItem.innerHTML += `<span class="justification">${justification}</span>`;
+
+        proofList.appendChild(listItem);
+        //makeFormulaDraggable(listItem.querySelector('.formula')); 
+        
+        if (!isShowLineFlag && !isAssumptionFlag && subGoalStack.length > 0) {
+            const currentSubGoalInfo = subGoalStack[subGoalStack.length - 1];
+            if (scopeLevel === currentSubGoalInfo.scope) { 
+                if (currentSubGoalInfo.type === "RAA") {
+                    const linesInCurrentSubProof = Array.from(proofList.querySelectorAll(`li[data-scope-level="${currentSubGoalInfo.scope}"][data-parent-subproof-id="${currentSubGoalInfo.subproofId}"]`));
+                    const assumptionLine = proofList.querySelector(`li[data-line-number="${currentSubGoalInfo.assumptionLineFullId}"][data-parent-subproof-id="${currentSubGoalInfo.subproofId}"]`);
+                    if(assumptionLine && !linesInCurrentSubProof.includes(assumptionLine)) linesInCurrentSubProof.push(assumptionLine);
+
+                    for (const existingLi of linesInCurrentSubProof) {
+                        if (existingLi === listItem) continue; 
+                        const existingFormulaEl = existingLi.querySelector('.formula');
+                        if (existingFormulaEl && isNegationOf(cleanFormula, existingFormulaEl.dataset.formula)) {
+                            dischargeRAA(currentSubGoalInfo, existingLi.dataset.lineNumber, dataLineId); 
+                            return listItem; 
+                        }
+                    }
+                } else if (currentSubGoalInfo.type === "→I") {
+                    const subGoalAst = LogicParser.textToAst(currentSubGoalInfo.goal);
+                    if (LogicParser.areAstsEqual(formulaAst, subGoalAst)) {
+                        dischargeConditionalIntroduction(currentSubGoalInfo, dataLineId);
+                        return listItem; 
+                    }
+                }
+            }
+        } else if (scopeLevel === 0 && !isShowLineFlag && !isAssumptionFlag) { 
+            checkAndHandleMainGoalCompletion(formulaAst, listItem);
+        }
+        return listItem;
+    }
+    
+    function checkAndHandleMainGoalCompletion(provenAst, lineItem) {
+        const goalAst = LogicParser.textToAst(goalFormula);
+        if (currentScopeLevel === 0 && goalAst && provenAst && LogicParser.areAstsEqual(provenAst, goalAst)) {
+            if (lineItem) lineItem.classList.add('proof-line-complete');
+            showFeedback("Main Proof Goal Achieved!", false);
+            if(gameTitle) gameTitle.textContent += " - Solved!";
+            return true;
+        }
+        return false;
+    }
+
+    function startProofByContradiction(wffToProve) { 
+        const goalAst = LogicParser.textToAst(wffToProve);
+        if (!goalAst) { showFeedback("Cannot start RAA: Invalid formula.", true); return; }
+
+        const showLineItem = addProofLine(`Show: ${wffToProve}`, "Goal (RAA)", currentScopeLevel, false, true);
+        if (!showLineItem) { return; }
+        
+        const subproofId = showLineItem.dataset.subproofId; 
+        const showLineFullId = showLineItem.dataset.lineNumber; 
+        currentScopeLevel++;
+
+        const assumptionAst = { type: 'negation', operand: goalAst };
+        const assumptionFormula = LogicParser.astToText(assumptionAst);
+
+        subGoalStack.push({
+            forWff: wffToProve, type: "RAA", assumptionFormula: assumptionFormula,
+            showLineFullId: showLineFullId, parentLineDisplay: showLineFullId, 
+            subLineLetterCode: 97, scope: currentScopeLevel, assumptionLineFullId: "",
+            subproofId: subproofId 
+        });
+        const assumptionLineItem = addProofLine(assumptionFormula, "Assumption (RAA)", currentScopeLevel, true);
+        if (assumptionLineItem) {
+            subGoalStack[subGoalStack.length - 1].assumptionLineFullId = assumptionLineItem.dataset.lineNumber;
+        }
+        updateSubGoalDisplay();
+        showFeedback(`Subproof (RAA): Assume ${assumptionFormula}. Derive a contradiction.`, false, true);
+    }
+
+    function startConditionalIntroduction(conditionalAst) { 
+        const conditionalFormula = LogicParser.astToText(conditionalAst);
+        const antecedentFormula = LogicParser.astToText(conditionalAst.left);
+        const consequentFormula = LogicParser.astToText(conditionalAst.right);
+
+        const showLineItem = addProofLine(`Show: ${conditionalFormula}`, "Goal (→I)", currentScopeLevel, false, true);
+        if (!showLineItem) { return; }
+
+        const subproofId = showLineItem.dataset.subproofId; 
+        const showLineFullId = showLineItem.dataset.lineNumber;
+        currentScopeLevel++;
+        subGoalStack.push({
+            goal: consequentFormula, forWff: conditionalFormula, type: "→I", assumptionFormula: antecedentFormula,
+            showLineFullId: showLineFullId, parentLineDisplay: showLineFullId,
+            subLineLetterCode: 97, scope: currentScopeLevel, assumptionLineFullId: "",
+            subproofId: subproofId 
+        });
+        const assumptionLineItem = addProofLine(antecedentFormula, "Assumption (→I)", currentScopeLevel, true);
+         if (assumptionLineItem) {
+            subGoalStack[subGoalStack.length - 1].assumptionLineFullId = assumptionLineItem.dataset.lineNumber;
+         }
+        updateSubGoalDisplay();
+        showFeedback(`Subproof (→I): Assume ${antecedentFormula}. Derive ${consequentFormula}.`, false, true);
+    }
+
+    function dischargeRAA(subproofDetails, contradictoryLine1Id, contradictoryLine2Id) {
+        if (!subproofDetails || subproofDetails.type !== "RAA") { return; }
+        const dischargedSubproof = subGoalStack.pop();
+        const parentScopeLevel = dischargedSubproof.scope - 1; 
+        const showLineElement = proofList.querySelector(`li[data-line-number="${dischargedSubproof.showLineFullId}"]`);
+
+        if (!showLineElement) {
+            currentScopeLevel = parentScopeLevel; updateSubGoalDisplay();
+            addProofLine(dischargedSubproof.forWff, `RAA ${dischargedSubproof.assumptionLineFullId} (${contradictoryLine1Id},${contradictoryLine2Id})`, parentScopeLevel);
+            return;
+        }
+        
+        const justificationText = `RAA ${dischargedSubproof.assumptionLineFullId} (${contradictoryLine1Id}, ${contradictoryLine2Id})`;
+        
+        const showFormulaSpan = showLineElement.querySelector('.formula');
+        const showJustSpan = showLineElement.querySelector('.justification');
+        showFormulaSpan.innerHTML = ''; // Clear old content
+        showFormulaSpan.appendChild(renderFormulaWithDraggableVars(dischargedSubproof.forWff));
+        showFormulaSpan.dataset.formula = dischargedSubproof.forWff;
+
+        if (showJustSpan) showJustSpan.textContent = justificationText;
+        
+        showLineElement.classList.remove('show-line'); 
+        showLineElement.classList.add('proven-show-line', 'subproof-header-collapsible');
+        Object.assign(showLineElement.dataset, { 
+            isProven: 'true', 
+            isShowLine: 'false', 
+            isAssumption: 'false',
+            isCollapsible: 'true', 
+            collapsed: 'true'   
+        });
+
+        proofList.querySelectorAll(`li[data-parent-subproof-id="${dischargedSubproof.subproofId}"]`).forEach(line => {
+            line.classList.add('subproof-content-hidden');
+        });
+        
+        currentScopeLevel = parentScopeLevel; 
+        updateSubGoalDisplay();
+        showFeedback(`Discharged RAA for ${dischargedSubproof.forWff}. Subproof collapsed.`, false);
+        const provenAst = LogicParser.textToAst(dischargedSubproof.forWff);
+        checkAndHandleMainGoalCompletion(provenAst, showLineElement);
+    }
+
+    function dischargeConditionalIntroduction(subproofDetails, consequentLineId) {
+        if (!subproofDetails || subproofDetails.type !== "→I") { return; }
+        const dischargedSubproof = subGoalStack.pop();
+        const parentScopeLevel = dischargedSubproof.scope - 1;
+        const showLineElement = proofList.querySelector(`li[data-line-number="${dischargedSubproof.showLineFullId}"]`);
+
+        if (!showLineElement) {
+            currentScopeLevel = parentScopeLevel; updateSubGoalDisplay();
+            addProofLine(dischargedSubproof.forWff, `→I ${dischargedSubproof.assumptionLineFullId}–${consequentLineId}`, parentScopeLevel);
+            return;
+        }
+        const justificationText = `→I ${dischargedSubproof.assumptionLineFullId}–${consequentLineId}`;
+        const showFormulaSpan = showLineElement.querySelector('.formula');
+        const showJustSpan = showLineElement.querySelector('.justification');
+        
+        showFormulaSpan.innerHTML = ''; // Clear old content
+        showFormulaSpan.appendChild(renderFormulaWithDraggableVars(dischargedSubproof.forWff));
+        showFormulaSpan.dataset.formula = dischargedSubproof.forWff;
+
+        if (showJustSpan) showJustSpan.textContent = justificationText;
+        
+        showLineElement.classList.remove('show-line'); 
+        showLineElement.classList.add('proven-show-line', 'subproof-header-collapsible');
+        Object.assign(showLineElement.dataset, { 
+            isProven: 'true', 
+            isShowLine: 'false', 
+            isAssumption: 'false',
+            isCollapsible: 'true',
+            collapsed: 'true' 
+        });
+        
+        proofList.querySelectorAll(`li[data-parent-subproof-id="${dischargedSubproof.subproofId}"]`).forEach(line => {
+            line.classList.add('subproof-content-hidden');
+        });
+
+        currentScopeLevel = parentScopeLevel;
+        updateSubGoalDisplay();
+        showFeedback(`Discharged →I for ${dischargedSubproof.forWff}. Subproof collapsed.`, false);
+        const provenAst = LogicParser.textToAst(dischargedSubproof.forWff);
+        checkAndHandleMainGoalCompletion(provenAst, showLineElement);
+    }
+    
+    function handleSubproofToggle(event) {
+        const headerLi = event.target.closest('li[data-is-collapsible="true"]');
+        if (!headerLi) return;
+
+        const subproofId = headerLi.dataset.subproofId;
+        const isCurrentlyCollapsed = headerLi.dataset.collapsed === 'true';
+        
+        headerLi.dataset.collapsed = (!isCurrentlyCollapsed).toString(); // Toggle the state
+
+        proofList.querySelectorAll(`li[data-parent-subproof-id="${subproofId}"]`).forEach(line => {
+            line.classList.toggle('subproof-content-hidden', !isCurrentlyCollapsed);
+        });
+    }
+
+
+    function updateSubGoalDisplay() {
+        if (!subGoalDisplayContainer) return;
+        subGoalDisplayContainer.innerHTML = ''; 
+        if (subGoalStack.length > 0) {
+            const {scope, type, assumptionFormula, goal, forWff} = subGoalStack[subGoalStack.length - 1];
+            let goalText = goal; 
+            if (type === "RAA") {
+                goalText = "a contradiction (ψ and ~ψ)"; 
+            }
+            subGoalDisplayContainer.innerHTML = `<div class="subproof-goal-display">Current Sub-Goal (Scope ${scope}, Type: ${type}): <br>Assume: <span>${assumptionFormula}</span><br>Derive: <span>${goalText}</span> (to prove <span>${forWff}</span>)</div>`;
+        }
+    }
+
+    // --- NEW: AST-based Logic Helpers ---
+    function isNegationOf(f1, f2) {
+        const ast1 = LogicParser.textToAst(f1);
+        const ast2 = LogicParser.textToAst(f2);
+        if (!ast1 || !ast2) return false;
+
+        return (ast1.type === 'negation' && LogicParser.areAstsEqual(ast1.operand, ast2)) ||
+               (ast2.type === 'negation' && LogicParser.areAstsEqual(ast2.operand, ast1));
+    }
+    function isAssumption(lineItem) { return lineItem && lineItem.dataset.isAssumption === 'true'; }
+
+    // --- End AST-based Helpers ---
+
+    function clearSlot(slotElement) {
+        if (slotElement) {
+            slotElement.textContent = slotElement.dataset.placeholder || "Drop here...";
+            slotElement.classList.add('text-slate-400', 'italic'); 
+            delete slotElement.dataset.formula; delete slotElement.dataset.line;
+            delete slotElement.dataset.source; delete slotElement.dataset.elementId; 
+        }
+    }
+    function clearRuleSlots(ruleItemElement) { ruleItemElement.querySelectorAll('.drop-slot').forEach(clearSlot); }
+
+    // --- Feedback History and Zoom Functions ---
+    function changeWffTrayZoom(direction) {
+        const newSize = wffTrayFontSize + (direction * FONT_SIZE_STEP);
+        wffTrayFontSize = Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, newSize));
+        wffOutputTray.style.setProperty('--wff-tray-font-size', `${wffTrayFontSize}rem`);
+    }
+
+    // **NEW:** Zoom to point handler
+    function handleWrapperZoom(e) {
+        // **FIX**: Check against a list of non-zoomable elements
+        if (e.target.closest('button, .draggable-var, .formula, .rule-item, .connective-hotspot, .accordion-header, #proof-lines li')) {
+            return;
+        }
+        
+        const wrapper = e.currentTarget;
+        const isZoomed = wrapper.classList.toggle('zoomed');
+        
+        if (isZoomed) {
+            const rect = wrapper.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / rect.width * 100;
+            const y = (e.clientY - rect.top) / rect.height * 100;
+            wrapper.style.transformOrigin = `${x}% ${y}%`;
+        } else {
+            wrapper.style.transformOrigin = ''; // Reset to center
+        }
+    }
+
+
+    function showFeedback(message, isError = false, isWarning = false) {
+        if (!proofFeedbackDiv) return;
+
+        let type = 'success';
+        if (isError) type = 'error';
+        else if (isWarning) type = 'warning';
+
+        feedbackHistory.push({ message, type });
+        currentFeedbackIndex = feedbackHistory.length - 1;
+        
+        displayCurrentFeedback();
+    }
+
+    function displayCurrentFeedback() {
+        if (!proofFeedbackDiv || feedbackHistory.length === 0) {
+            if (proofFeedbackDiv) {
+                proofFeedbackDiv.textContent = "";
+                proofFeedbackDiv.className = 'text-center font-bold flex-grow mx-2'; 
+            }
+            updateFeedbackNavButtons();
+            return;
+        }
+        
+        const { message, type } = feedbackHistory[currentFeedbackIndex];
+        
+        proofFeedbackDiv.textContent = message;
+        proofFeedbackDiv.className = 'text-center font-bold flex-grow mx-2'; // Reset classes
+        
+        if (type === 'error') proofFeedbackDiv.classList.add('text-red-400');
+        else if (type === 'warning') proofFeedbackDiv.classList.add('text-yellow-400');
+        else proofFeedbackDiv.classList.add('text-green-400');
+        
+        updateFeedbackNavButtons();
+    }
+
+    function updateFeedbackNavButtons() {
+        if (!prevFeedbackBtn || !nextFeedbackBtn) return;
+        prevFeedbackBtn.disabled = currentFeedbackIndex <= 0;
+        nextFeedbackBtn.disabled = currentFeedbackIndex >= feedbackHistory.length - 1;
+    }
+
+    function showPreviousFeedback() {
+        if (currentFeedbackIndex > 0) {
+            currentFeedbackIndex--;
+            displayCurrentFeedback();
+        }
+    }
+
+    function showNextFeedback() {
+        if (currentFeedbackIndex < feedbackHistory.length - 1) {
+            currentFeedbackIndex++;
+            displayCurrentFeedback();
+        }
+    }
+    
+    // **NEW:** Problem Loading functions
+    function getUrlParams() {
+        const params = new URLSearchParams(window.location.search);
+        const set = params.get('set');
+        const problem = params.get('problem');
+        return { set: set ? parseInt(set) : null, problem: problem ? parseInt(problem) : null };
+    }
+
+    function loadProblem(set, problemNumber) {
+        if (!problemSets[set] || !problemSets[set].problems[problemNumber - 1]) {
+            showFeedback(`Problem ${set}-${problemNumber} not found. Loading default.`, true);
+            // Load a default problem if the requested one is not found
+            loadProblem(1, 1);
+            return;
+        }
+        
+        currentProblem = { set, number: problemNumber };
+        const problem = problemSets[set].problems[problemNumber - 1];
+        premises = problem.premises.map(p => ({ formula: p, justification: "Premise" }));
+        goalFormula = problem.goal;
+
+        // Reset the entire proof state with the new problem data
+        resetProofState();
+    }
+
+
+    function resetProofState() {
+        if (!proofList) return;
+        
+        // Clear the proof board
+        proofList.innerHTML = ''; 
+        nextLineNumberGlobal = 1; 
+        currentScopeLevel = 0; 
+        subGoalStack = [];
+        updateSubGoalDisplay();
+
+        // Dynamically update the premise and goal displays based on the current problem
+        const problemInfoDiv = document.getElementById('proof-problem-info');
+        let problemHtml = '';
+        premises.forEach((p, i) => {
+            problemHtml += `<div class="proof-header">Premise ${i + 1}: <span>${p.formula}</span></div>`;
+        });
+        problemHtml += `<div class="proof-goal">Prove: <span>${goalFormula}</span></div>`;
+        problemInfoDiv.innerHTML = problemHtml;
+        
+        // Set the game title
+        const problemSetInfo = problemSets[currentProblem.set];
+        if(gameTitle) gameTitle.textContent = `Natural Deduction Contraption - ${problemSetInfo.name} #${currentProblem.number}`;
+
+        // Add the current premises to the proof
+        premises.forEach(p => addProofLine(p.formula, p.justification, 0));
+        
+        // Reset UI elements
+        ruleItems.forEach(item => { item.classList.remove('active'); clearRuleSlots(item); });
+        wffOutputTray.innerHTML = ''; 
+        clearWffInProgress(); 
+        
+        // Reset WFF tray zoom
+        wffTrayFontSize = 2.4;
+        changeWffTrayZoom(0);
+        
+        // **NEW**: Reset main zoom
+        gameWrapper.classList.remove('zoomed');
+        gameWrapper.style.transformOrigin = '';
+
+
+        // Reset feedback history
+        feedbackHistory = [];
+        currentFeedbackIndex = -1;
+        displayCurrentFeedback(); 
+        showFeedback(`Problem ${currentProblem.set}-${currentProblem.number} loaded. Good luck!`, false);
+        
+        // Pre-populate tray for FOL problems
+        if (currentProblem.set == 2) {
+            createDraggableWffInTray('x');
+            createDraggableWffInTray('y');
+            createDraggableWffInTray('F(x)');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', initGame);
+    </script>
+</body>
+</html>
