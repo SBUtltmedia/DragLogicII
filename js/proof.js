@@ -17,7 +17,8 @@ function addProofLine(formula, justification, scopeLevel = currentScopeLevel, is
             const existingFormulaEl = line.querySelector('.formula');
             const existingAst = LogicParser.textToAst(existingFormulaEl.dataset.formula || existingFormulaEl.textContent);
             if (existingAst && formulaAst && LogicParser.areAstsEqual(existingAst, formulaAst) && line.dataset.isProven === 'true') {
-                showFeedback("This line already exists and is proven in the current scope.", true); return null;
+                EventBus.emit('feedback:show', { message: "This line already exists and is proven in the current scope.", isError: true }); 
+                return null;
             }
         }
     }
@@ -105,7 +106,7 @@ function checkAndHandleMainGoalCompletion(provenAst, lineItem) {
     const goalAst = LogicParser.textToAst(goalFormula);
     if (currentScopeLevel === 0 && goalAst && provenAst && LogicParser.areAstsEqual(provenAst, goalAst)) {
         if (lineItem) lineItem.classList.add('proof-line-complete');
-        showFeedback("Main Proof Goal Achieved!", false);
+        EventBus.emit('feedback:show', { message: "Main Proof Goal Achieved!", isError: false });
         if(gameTitle) gameTitle.textContent += " - Solved!";
 
         // Disable further interaction
@@ -135,7 +136,10 @@ function checkAndHandleMainGoalCompletion(provenAst, lineItem) {
 
 function startProofByContradiction(wffToProve) {
     const goalAst = LogicParser.textToAst(wffToProve);
-    if (!goalAst) { showFeedback("Cannot start RAA: Invalid formula.", true); return; }
+    if (!goalAst) { 
+        EventBus.emit('feedback:show', { message: "Cannot start RAA: Invalid formula.", isError: true });
+        return; 
+    }
 
     const showLineItem = addProofLine(`Show: ${wffToProve}`, "Goal (RAA)", currentScopeLevel, false, true);
     if (!showLineItem) { return; }
@@ -158,7 +162,7 @@ function startProofByContradiction(wffToProve) {
         subGoalStack[subGoalStack.length - 1].assumptionLineFullId = assumptionLineItem.dataset.lineNumber;
     }
     updateSubGoalDisplay();
-    showFeedback(`Subproof (RAA): Assume ${assumptionFormula}. Derive a contradiction.`, false, true);
+    EventBus.emit('feedback:show', { message: `Subproof (RAA): Assume ${assumptionFormula}. Derive a contradiction.`, isError: false, isWarning: true });
 }
 
 function startConditionalIntroduction(conditionalAst) {
@@ -183,7 +187,7 @@ function startConditionalIntroduction(conditionalAst) {
         subGoalStack[subGoalStack.length - 1].assumptionLineFullId = assumptionLineItem.dataset.lineNumber;
      }
     updateSubGoalDisplay();
-    showFeedback(`Subproof (→I): Assume ${antecedentFormula}. Derive ${consequentFormula}.`, false, true);
+    EventBus.emit('feedback:show', { message: `Subproof (→I): Assume ${antecedentFormula}. Derive ${consequentFormula}.`, isError: false, isWarning: true });
 }
 
 function dischargeSubproof(subproofDetails, justificationText) {
@@ -223,7 +227,7 @@ function dischargeSubproof(subproofDetails, justificationText) {
 
     currentScopeLevel = parentScopeLevel;
     updateSubGoalDisplay();
-    showFeedback(`Discharged ${dischargedSubproof.type} for ${dischargedSubproof.forWff}. Subproof collapsed.`, false);
+    EventBus.emit('feedback:show', { message: `Discharged ${dischargedSubproof.type} for ${dischargedSubproof.forWff}. Subproof collapsed.`, isError: false });
     const provenAst = LogicParser.textToAst(dischargedSubproof.forWff);
     checkAndHandleMainGoalCompletion(provenAst, showLineElement);
 }
@@ -261,3 +265,119 @@ function setupProofLineDragging() {
     proofList.addEventListener('dragstart', handleDragStartProofLine);
     proofList.addEventListener('dragend', handleGenericDragEnd);
 }
+
+// Event Listeners
+EventBus.on('proof:startContradiction', (data) => {
+    startProofByContradiction(data.formula);
+});
+
+EventBus.on('proof:contradiction', (data) => {
+    const activeSubProof = subGoalStack.length > 0 ? subGoalStack[subGoalStack.length - 1] : null;
+    if (activeSubProof && activeSubProof.type === "RAA" &&
+        data.draggedScope === activeSubProof.scope && data.targetScope === activeSubProof.scope) {
+        if (isNegationOf(data.draggedFormula, data.targetFormula)) {
+            dischargeRAA(activeSubProof, data.draggedLineId, data.targetLineId);
+            return;
+        }
+    } else {
+         showFeedback("Cannot form contradiction here or not in RAA.", true);
+    }
+});
+
+EventBus.on('proof:reiterate', (data) => {
+    if (data.scope <= currentScopeLevel) {
+        addProofLine(data.formula, `Re ${data.lineId}`, currentScopeLevel);
+    } else {
+        showFeedback("Reiteration Error: Cannot reiterate from inner scope.", true);
+    }
+});
+
+EventBus.on('rule:apply', (data) => {
+    const { ruleName, droppedFormula, droppedLineId, droppedScope, elementId, sourceType, targetSlot, ruleItemElement } = data;
+
+    if (sourceType === 'proof-line-formula' && droppedScope > currentScopeLevel) {
+        showFeedback("Rule Error: Cannot use line from inner, closed subproof.", true);
+        clearSlot(targetSlot);
+        return;
+    }
+
+    const expectedPattern = targetSlot.dataset.expectedPattern;
+    if (expectedPattern) {
+        const droppedAst = LogicParser.textToAst(droppedFormula);
+        if (!droppedAst) {
+            showFeedback(`Invalid formula dropped: "${droppedFormula}"`, true);
+            clearSlot(targetSlot);
+            return;
+        }
+
+        let isValid = false;
+        switch(expectedPattern) {
+            case 'φ → ψ':
+                if (droppedAst.type === 'binary' && droppedAst.operator === '→') isValid = true;
+                else showFeedback("Invalid drop. Expected a conditional (e.g., A → B).", true);
+                break;
+            case '~ψ':
+                if (droppedAst.type === 'negation') isValid = true;
+                else showFeedback("Invalid drop. Expected a negation (e.g., ~A).", true);
+                break;
+            case 'φ ∧ ψ':
+                if (droppedAst.type === 'binary' && droppedAst.operator === '∧') isValid = true;
+                else showFeedback("Invalid drop. Expected a conjunction (e.g., A ∧ B).", true);
+                break;
+            default:
+                isValid = true; // No specific pattern to check
+        }
+        if (!isValid) {
+            clearSlot(targetSlot);
+            return;
+        }
+    }
+
+    targetSlot.dataset.source = sourceType;
+    targetSlot.dataset.formula = droppedFormula;
+    if (droppedLineId) targetSlot.dataset.line = droppedLineId;
+    else delete targetSlot.dataset.line;
+    if (elementId) targetSlot.dataset.elementId = elementId;
+    targetSlot.textContent = droppedLineId ? `${droppedLineId}: ${droppedFormula}` : droppedFormula;
+    targetSlot.classList.remove('text-slate-400', 'italic');
+
+    let ruleApplicationResult = null;
+    let autoAppliedManually = false;
+
+    if (ruleName === 'CI') {
+        const ast = LogicParser.textToAst(droppedFormula);
+        if (ast && ast.type === 'binary' && ast.operator === '→') {
+            startConditionalIntroduction(ast);
+            if (sourceType === 'wff-tray-formula') {
+                EventBus.emit('wff:remove', { elementId: elementId });
+            }
+            autoAppliedManually = true;
+        } else {
+            showFeedback("→I Error: Dropped formula must be a conditional (φ → ψ).", true);
+            clearSlot(targetSlot);
+        }
+    } else if (ruleName === "MP") ruleApplicationResult = attemptAutoModusPonens(ruleItemElement);
+    else if (ruleName === "MT") ruleApplicationResult = attemptAutoModusTollens(ruleItemElement);
+    else if (ruleName === "AndI") ruleApplicationResult = attemptAutoAndIntroduction(ruleItemElement);
+    else if (ruleName === "AndE") ruleApplicationResult = attemptAutoAndElimination(ruleItemElement);
+    else if (ruleName === "EI") ruleApplicationResult = attemptAutoExistentialIntroduction(ruleItemElement);
+    else if (ruleName === "DN") ruleApplicationResult = attemptAutoDoubleNegation(ruleItemElement);
+    else if (ruleName === "Reiteration" && droppedLineId) {
+        if (addProofLine(droppedFormula, `Re ${droppedLineId}`, currentScopeLevel)) {
+            autoAppliedManually = true;
+        }
+    }
+
+    if (ruleApplicationResult) {
+        const newProofLine = addProofLine(ruleApplicationResult.resultFormula, ruleApplicationResult.justificationText, currentScopeLevel);
+        if (newProofLine) {
+            ruleApplicationResult.consumedWffIds.forEach(id => EventBus.emit('wff:remove', { elementId: id }));
+            autoAppliedManually = true;
+        }
+    }
+
+    if (autoAppliedManually) {
+        clearRuleSlots(ruleItemElement);
+        ruleItemElement.classList.remove('active');
+    }
+});

@@ -18,6 +18,17 @@ function cacheDomElements() {
 }
 
 function addEventListeners() {
+    cacheDomElements();
+    const helpIcon = document.getElementById('help-icon');
+    window.helpIcon = helpIcon; // Make it globally available for simplicity
+    helpIcon.addEventListener('click', () => {
+        const currentProblemSet = currentProblem.set;
+        if (currentProblemSet === 1) {
+            startTutorial(propositionalTutorialSteps);
+        } else if (currentProblemSet === 2) {
+            startTutorial(folTutorialSteps);
+        }
+    });
     draggableVariables.forEach(v => {
         v.addEventListener('dragstart', handleWffDragStart);
         v.addEventListener('dragend', handleGenericDragEnd);
@@ -74,6 +85,14 @@ function addEventListeners() {
     gameWrapper.addEventListener('dblclick', handleWrapperZoom);
 
     setupProofLineDragging();
+
+    EventBus.on('feedback:show', (data) => {
+        showFeedback(data.message, data.isError, data.isWarning);
+    });
+
+    EventBus.on('wff:remove', (data) => {
+        removeWffFromTrayById(data.elementId);
+    });
 }
 
 function updateLayout(wrapperId = 'game-wrapper', targetAspectRatio = 16 / 9, rootFontSizeReferenceWidth = 120) {

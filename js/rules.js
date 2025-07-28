@@ -96,7 +96,8 @@ function attemptAutoModusPonens(ruleItemElement) {
             consumedWffIds: consumedWffIds
         };
     }
-    showFeedback("MP Error: The second premise must match the antecedent of the first.", true); return null;
+    EventBus.emit('feedback:show', { message: "MP Error: The second premise must match the antecedent of the first.", isError: true });
+    return null;
 }
 
 function attemptAutoModusTollens(ruleItemElement) {
@@ -122,7 +123,8 @@ function attemptAutoModusTollens(ruleItemElement) {
             consumedWffIds: consumedWffIds
         };
     }
-    showFeedback("MT Error: The second premise must be the negation of the first's consequent.", true); return null;
+    EventBus.emit('feedback:show', { message: "MT Error: The second premise must be the negation of the first's consequent.", isError: true });
+    return null;
 }
 
 function attemptAutoAndIntroduction(ruleItemElement) {
@@ -132,7 +134,7 @@ function attemptAutoAndIntroduction(ruleItemElement) {
 
     const astA = LogicParser.textToAst(premiseA.formula);
     const astB = LogicParser.textToAst(premiseB.formula);
-    if (!astA || !astB) { showFeedback("One of the formulas for ∧I is invalid.", true); return null; }
+    if (!astA || !astB) { EventBus.emit('feedback:show', { message: "One of the formulas for ∧I is invalid.", isError: true }); return null; }
 
     const resultAst = { type: 'binary', operator: '∧', left: astA, right: astB };
 
@@ -154,7 +156,8 @@ function attemptAutoAndElimination(ruleItemElement) {
     const ast = LogicParser.textToAst(conjunctionPremise.formula);
     if (!ast || ast.type !== 'binary' || ast.operator !== '∧') {
         // This check is now redundant due to slot validation, but safe to keep
-        showFeedback("∧E Error: Premise must be a conjunction (φ ∧ ψ).", true); return null;
+        EventBus.emit('feedback:show', { message: "∧E Error: Premise must be a conjunction (φ ∧ ψ).", isError: true });
+        return null;
     }
 
     const leftPart = LogicParser.astToText(ast.left);
@@ -165,7 +168,7 @@ function attemptAutoAndElimination(ruleItemElement) {
     let resultFormula = null;
     if (choice === "1") resultFormula = leftPart;
     else if (choice === "2") resultFormula = rightPart;
-    else { showFeedback("∧E: No valid choice made.", true); return null; }
+    else { EventBus.emit('feedback:show', { message: "∧E: No valid choice made.", isError: true }); return null; }
 
     const consumedWffIds = [];
     if (conjunctionPremise.source === 'wff-tray-formula' && conjunctionPremise.elementId) consumedWffIds.push(conjunctionPremise.elementId);
@@ -181,19 +184,19 @@ function attemptAutoExistentialIntroduction(ruleItemElement) {
     const termAst = LogicParser.textToAst(termPremise.formula);
 
     if (!formulaAst || !termAst) {
-        showFeedback("∃I Error: Invalid formula or term.", true);
+        EventBus.emit('feedback:show', { message: "∃I Error: Invalid formula or term.", isError: true });
         return null;
     }
 
     // Restriction: The term used for generalization must be denoting.
     if (!isTermDenoting(termAst, proofList)) {
-        showFeedback(`∃I Error: The term "${LogicParser.astToText(termAst)}" must be proven to be denoting.`, true);
+        EventBus.emit('feedback:show', { message: `∃I Error: The term "${LogicParser.astToText(termAst)}" must be proven to be denoting.`, isError: true });
         return null;
     }
 
     const variableToIntroduce = prompt(`Introduce which variable (e.g., x, y, z) for "${LogicParser.astToText(termAst)}"?`);
     if (!/^[xyz]$/.test(variableToIntroduce)) {
-        showFeedback("∃I Error: You must introduce a valid variable (x, y, or z).", true);
+        EventBus.emit('feedback:show', { message: "∃I Error: You must introduce a valid variable (x, y, or z).", isError: true });
         return null;
     }
 
@@ -241,7 +244,7 @@ function attemptAutoDoubleNegation(ruleItemElement) {
     const premise = slotsData[0];
 
     const ast = LogicParser.textToAst(premise.formula);
-    if (!ast) { showFeedback("Invalid formula for DN.", true); return null; }
+    if (!ast) { EventBus.emit('feedback:show', { message: "Invalid formula for DN.", isError: true }); return null; }
 
     let resultAst;
     if (ast.type === 'negation' && ast.operand.type === 'negation') {
@@ -264,18 +267,18 @@ function attemptAutoUniversalInstantiation(ruleItemElement) {
     const termAst = LogicParser.textToAst(termPremise.formula);
 
     if (!quantifiedAst || quantifiedAst.type !== 'quantifier' || quantifiedAst.quantifier !== '∀') {
-        showFeedback("UI Error: First premise must be a universally quantified formula (∀x...).", true);
+        EventBus.emit('feedback:show', { message: "UI Error: First premise must be a universally quantified formula (∀x...).", isError: true });
         return null;
     }
 
     if (!termAst || (termAst.type !== 'variable' && termAst.type !== 'description')) {
-        showFeedback("UI Error: Second premise must be a term (a variable or ι-expression).", true);
+        EventBus.emit('feedback:show', { message: "UI Error: Second premise must be a term (a variable or ι-expression).", isError: true });
         return null;
     }
 
     // Restriction: The term used for instantiation must be denoting.
     if (!isTermDenoting(termAst, proofList)) {
-        showFeedback(`UI Error: The term "${LogicParser.astToText(termAst)}" must be proven to be denoting.`, true);
+        EventBus.emit('feedback:show', { message: `UI Error: The term "${LogicParser.astToText(termAst)}" must be proven to be denoting.`, isError: true });
         return null;
     }
 
@@ -323,7 +326,7 @@ function attemptAutoUniversalInstantiation(ruleItemElement) {
             consumedWffIds
         };
     } catch (e) {
-        showFeedback(`UI Error: ${e.message}`, true);
+        EventBus.emit('feedback:show', { message: `UI Error: ${e.message}`, isError: true });
         return null;
     }
 }
@@ -340,15 +343,14 @@ function attemptAutoRule(ruleItemElement) {
         case 'DN': result = attemptAutoDoubleNegation(ruleItemElement); break;
         case 'UI': result = attemptAutoUniversalInstantiation(ruleItemElement); break;
         case '∃I': result = attemptAutoExistentialIntroduction(ruleItemElement); break;
-        default: showFeedback(`Rule "${ruleType}" is not implemented yet.`, true); return;
+        default: EventBus.emit('feedback:show', { message: `Rule "${ruleType}" is not implemented yet.`, isError: true }); return;
     }
 
     if (result && result.resultFormula) {
         addProofLine(result.resultFormula, result.justificationText);
         if (result.consumedWffIds && result.consumedWffIds.length > 0) {
             result.consumedWffIds.forEach(id => {
-                const elem = document.getElementById(id);
-                if (elem) elem.remove();
+                EventBus.emit('wff:remove', { elementId: id });
             });
         }
         // Clear slots after successful application

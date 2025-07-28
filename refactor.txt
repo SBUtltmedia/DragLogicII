@@ -1,0 +1,88 @@
+Key Scalability Issues
+
+   1. Global State Management (`globals.js`):
+       * Problem: The application's state (e.g., firstOperandWFF,
+         currentScopeLevel, subGoalStack) is managed through a large
+         number of global variables. This is the most significant
+         scalability bottleneck.
+       * Impact: Global state makes the application's data flow hard to
+         trace and debug. Any part of the code can modify the state at
+         any time, leading to unpredictable behavior and bugs that are
+         difficult to reproduce. It also makes it nearly impossible to
+         implement features like saving/loading state or undo/redo
+         functionality.
+
+   2. Tight Coupling:
+       * Problem: The modules are highly dependent on each other. For
+         instance, drag-drop.js directly calls functions in proof.js and
+         ui.js. This means the drag-and-drop logic is aware of the
+         specific implementation details of the proof and UI systems.
+       * Impact: Tight coupling creates a "domino effect" where a change
+          in one file can cause unexpected breakages in others. This
+         slows down development, increases the risk of introducing bugs,
+          and makes the codebase resistant to change.
+
+   3. Mixed Concerns (Logic and Rendering):
+       * Problem: Application logic is frequently mixed with UI
+         rendering code. For example, the addProofLine function in
+         proof.js is responsible for both updating the internal proof
+         state and creating the corresponding HTML <li> element.
+       * Impact: This mixing of concerns makes it difficult to change
+         the UI without potentially breaking the core application
+         logic, and vice-versa. It also hinders the ability to create
+         different UIs for the same logic (e.g., a mobile version) or
+         to test the logic independently of the DOM.
+
+   4. Monolithic Files:
+       * Problem: Some files, particularly drag-drop.js, have a very
+         large number of responsibilities, handling the logic for
+         dragging and dropping variables, formulas, proof lines, and
+         rules.
+       * Impact: Large, monolithic files are hard to navigate,
+         understand, and maintain. Splitting them into smaller, more
+         focused modules would improve readability and make the code
+         easier to manage.
+
+  Recommendations for Improved Scalability
+
+  To address these issues and prepare the application for future
+  growth, I recommend the following architectural changes:
+
+   1. Centralize and Encapsulate State:
+       * Refactor the code to eliminate global variables. Consolidate
+         all application state into a single, well-defined object (a
+         "state store").
+       * Implement a clear pattern for state management. Instead of
+         modifying the state directly, use dedicated functions (i.e.,
+         "actions" or "mutations") to make changes. This creates a
+         predictable, one-way data flow. For a larger application, a
+         lightweight state management library could be considered.
+
+   2. Decouple Modules with an Event-Based System:
+       * Introduce an event bus or a publish/subscribe pattern. Instead
+         of modules calling each other directly, they would communicate
+         by emitting and listening for events.
+       * Example: When a formula is dropped on a rule, drag-drop.js would
+          emit a formulaDroppedOnRule event with the relevant data. The
+         rules.js module would subscribe to this event and execute its
+         logic, without drag-drop.js needing to know about rules.js at
+         all.
+
+   3. Separate Logic from Rendering:
+       * Adopt a more declarative approach to rendering. The UI should
+         be a "function of the state."
+       * Create a dedicated render() function that takes the current
+         application state as input and updates the entire UI to match
+         that state. This function would be called every time the state
+         changes. This approach is central to modern UI frameworks (like
+          React or Vue) and dramatically simplifies UI development and
+         debugging.
+
+   4. Increase Modularity:
+       * Break down large files like drag-drop.js and rules.js into
+         smaller, more specialized modules. For example, drag-drop.js
+         could be split into wff-drag-handler.js,
+         proof-drag-handler.js, etc.
+
+  By implementing these changes, the application will become more
+  robust, maintainable, and easier to extend in the future.
