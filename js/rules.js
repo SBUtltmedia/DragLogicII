@@ -1,51 +1,23 @@
-function isTermDenoting(termAst, proofList) {
-    if (!termAst) return false;
-    // Simple variables are always considered denoting in this system.
-    if (termAst.type === 'variable') {
-        return true;
-    }
-    // For ι-expressions, we need to find a proof line that asserts its existence and uniqueness.
-    if (termAst.type === 'description') {
-        const termText = LogicParser.astToText(termAst);
-        // The formula we are looking for is ∃y(y = ιx(Fx))
-        const denotingFormulaAst = {
-            type: 'quantifier',
-            quantifier: '∃',
-            variable: 'y', // A standard variable used for this check
-            formula: {
-                type: 'binary',
-                operator: '=',
-                left: { type: 'variable', value: 'y' },
-                right: termAst
-            }
-        };
-        const denotingFormulaText = LogicParser.astToText(denotingFormulaAst);
+import { LogicParser } from './parser.js';
+import { EventBus } from './event-bus.js';
+import { store } from './store.js';
+import { addProofLine } from './proof.js';
 
-        const allLines = proofList.querySelectorAll('li[data-is-proven="true"]');
-        for (const line of allLines) {
-            const lineFormula = line.querySelector('.formula').dataset.formula;
-            if (lineFormula === denotingFormulaText) {
-                return true;
-            }
-        }
-        return false;
-    }
-    return false;
-}
+EventBus.on('rule:apply', handleRuleApply);
 
-function handleRuleItemDragEnter(event) {
+export function handleRuleItemDragEnter(event) {
     const item = event.currentTarget;
     item.dataset.hoverTimer = setTimeout(() => {
         item.classList.add('active');
     }, 500);
 }
 
-function handleRuleItemDragLeave(event) {
+export function handleRuleItemDragLeave(event) {
     const item = event.currentTarget;
     clearTimeout(item.dataset.hoverTimer);
 }
 
-function handleRuleItemClick(event) {
+export function handleRuleItemClick(event) {
     if (event.target && event.target.closest('.drop-slot')) {
         return;
     }
@@ -53,9 +25,19 @@ function handleRuleItemClick(event) {
     const clickedItem = event.currentTarget;
     const isAlreadyActive = clickedItem.classList.contains('active');
 
-    ruleItems.forEach(item => {
-        item.classList.remove('active');
+    // Deactivate all other rule items
+    document.querySelectorAll('.rule-item').forEach(item => {
+        if (item !== clickedItem) {
+            item.classList.remove('active');
+        }
     });
+
+    // Toggle the clicked one
+    if (isAlreadyActive) {
+        clickedItem.classList.remove('active');
+    } else {
+        clickedItem.classList.add('active');
+    }
 
     if (!isAlreadyActive) {
         clickedItem.classList.add('active');
@@ -92,7 +74,7 @@ function attemptAutoModusPonens(ruleItemElement) {
         if (premise2.source === 'wff-tray-formula' && premise2.elementId) consumedWffIds.push(premise2.elementId);
         return {
             resultFormula: LogicParser.astToText(ast1.right),
-            justificationText: `MP ${premise1.line || 'WFF'}, ${premise2.line || 'WFF'}`,
+            justificationText: `MP ${premise1.line || 'WFF'}, ${premise2.line || 'WFF'} `,
             consumedWffIds: consumedWffIds
         };
     }
@@ -119,7 +101,7 @@ function attemptAutoModusTollens(ruleItemElement) {
 
         return {
             resultFormula: LogicParser.astToText(resultAst),
-            justificationText: `MT ${premise1.line || 'WFF'}, ${premise2.line || 'WFF'}`,
+            justificationText: `MT ${premise1.line || 'WFF'}, ${premise2.line || 'WFF'} `,
             consumedWffIds: consumedWffIds
         };
     }
@@ -143,7 +125,7 @@ function attemptAutoAndIntroduction(ruleItemElement) {
     if (premiseB.source === 'wff-tray-formula' && premiseB.elementId) consumedWffIds.push(premiseB.elementId);
     return {
         resultFormula: LogicParser.astToText(resultAst),
-        justificationText: `∧I ${premiseA.line || 'WFF'}, ${premiseB.line || 'WFF'}`,
+        justificationText: `∧I ${premiseA.line || 'WFF'}, ${premiseB.line || 'WFF'} `,
         consumedWffIds: consumedWffIds
     };
 }
@@ -176,6 +158,7 @@ function attemptAutoAndElimination(ruleItemElement) {
 }
 
 function attemptAutoExistentialIntroduction(ruleItemElement) {
+    const { proofList } = store.getState();
     const slotsData = validateRuleSlots(ruleItemElement, 2);
     if (!slotsData) return null;
 
@@ -185,12 +168,6 @@ function attemptAutoExistentialIntroduction(ruleItemElement) {
 
     if (!formulaAst || !termAst) {
         EventBus.emit('feedback:show', { message: "∃I Error: Invalid formula or term.", isError: true });
-        return null;
-    }
-
-    // Restriction: The term used for generalization must be denoting.
-    if (!isTermDenoting(termAst, proofList)) {
-        EventBus.emit('feedback:show', { message: `∃I Error: The term "${LogicParser.astToText(termAst)}" must be proven to be denoting.`, isError: true });
         return null;
     }
 
@@ -232,7 +209,7 @@ function attemptAutoExistentialIntroduction(ruleItemElement) {
 
     return {
         resultFormula: LogicParser.astToText(resultAst),
-        justificationText: `∃I ${formulaPremise.line || 'WFF'}`,
+        justificationText: `∃I ${formulaPremise.line || 'WFF'} `,
         consumedWffIds
     };
 }
@@ -259,6 +236,7 @@ function attemptAutoDoubleNegation(ruleItemElement) {
 }
 
 function attemptAutoUniversalInstantiation(ruleItemElement) {
+    const { proofList } = store.getState();
     const slotsData = validateRuleSlots(ruleItemElement, 2);
     if (!slotsData) return null;
 
@@ -273,12 +251,6 @@ function attemptAutoUniversalInstantiation(ruleItemElement) {
 
     if (!termAst || (termAst.type !== 'variable' && termAst.type !== 'description')) {
         EventBus.emit('feedback:show', { message: "UI Error: Second premise must be a term (a variable or ι-expression).", isError: true });
-        return null;
-    }
-
-    // Restriction: The term used for instantiation must be denoting.
-    if (!isTermDenoting(termAst, proofList)) {
-        EventBus.emit('feedback:show', { message: `UI Error: The term "${LogicParser.astToText(termAst)}" must be proven to be denoting.`, isError: true });
         return null;
     }
 
@@ -322,7 +294,7 @@ function attemptAutoUniversalInstantiation(ruleItemElement) {
 
         return {
             resultFormula: LogicParser.astToText(resultAst),
-            justificationText: `UI ${quantifiedFormulaPremise.line || 'WFF'}`,
+            justificationText: `UI ${quantifiedFormulaPremise.line || 'WFF'} `,
             consumedWffIds
         };
     } catch (e) {
@@ -331,7 +303,7 @@ function attemptAutoUniversalInstantiation(ruleItemElement) {
     }
 }
 
-function attemptAutoRule(ruleItemElement) {
+export function attemptAutoRule(ruleItemElement) {
     const ruleType = ruleItemElement.dataset.rule;
     let result = null;
 
@@ -347,7 +319,8 @@ function attemptAutoRule(ruleItemElement) {
     }
 
     if (result && result.resultFormula) {
-        addProofLine(result.resultFormula, result.justificationText);
+        const { currentScopeLevel } = store.getState();
+        addProofLine(result.resultFormula, result.justificationText, currentScopeLevel);
         if (result.consumedWffIds && result.consumedWffIds.length > 0) {
             result.consumedWffIds.forEach(id => {
                 EventBus.emit('wff:remove', { elementId: id });
@@ -367,7 +340,137 @@ function attemptAutoRule(ruleItemElement) {
     }
 }
 
-function setupRuleInteractions() {
+function handleRuleApply(data) {
+    const { ruleName, droppedFormula, droppedLineId, droppedScope, elementId, sourceType, targetSlot, ruleItemElement } = data;
+    const { currentScopeLevel } = store.getState();
+
+    if (sourceType === 'proof-line-formula' && droppedScope > currentScopeLevel) {
+        EventBus.emit('feedback:show', { message: "Rule Error: Cannot use line from inner, closed subproof.", isError: true });
+        clearSlot(targetSlot);
+        return;
+    }
+
+    // **NEW: Drop Slot Validation**
+    const expectedPattern = targetSlot.dataset.expectedPattern;
+    if (expectedPattern) {
+        const droppedAst = LogicParser.textToAst(droppedFormula);
+        if (!droppedAst) {
+            EventBus.emit('feedback:show', { message: `Invalid formula dropped: "${droppedFormula}"`, isError: true });
+            clearSlot(targetSlot);
+            return;
+        }
+
+        let isValid = false;
+        switch(expectedPattern) {
+            case 'φ → ψ':
+                if (droppedAst.type === 'binary' && droppedAst.operator === '→') isValid = true;
+                else EventBus.emit('feedback:show', { message: "Invalid drop. Expected a conditional (e.g., A → B).", isError: true });
+                break;
+            case '~ψ':
+                if (droppedAst.type === 'negation') isValid = true;
+                else EventBus.emit('feedback:show', { message: "Invalid drop. Expected a negation (e.g., ~A).", isError: true });
+                break;
+            case 'φ ∧ ψ':
+                if (droppedAst.type === 'binary' && droppedAst.operator === '∧') isValid = true;
+                else EventBus.emit('feedback:show', { message: "Invalid drop. Expected a conjunction (e.g., A ∧ B).", isError: true });
+                break;
+            default:
+                isValid = true; // No specific pattern to check
+        }
+        if (!isValid) {
+            clearSlot(targetSlot);
+            return;
+        }
+    }
+
+
+    targetSlot.dataset.source = sourceType;
+    targetSlot.dataset.formula = droppedFormula;
+    if (droppedLineId) targetSlot.dataset.line = droppedLineId;
+    else delete targetSlot.dataset.line;
+    if (elementId) targetSlot.dataset.elementId = elementId;
+    targetSlot.textContent = droppedLineId ? `${droppedLineId}: ${droppedFormula}` : droppedFormula;
+    targetSlot.classList.remove('text-slate-400', 'italic');
+
+    let ruleApplicationResult = null;
+    let autoAppliedManually = false;
+
+    if (ruleName === 'CI') {
+        const ast = LogicParser.textToAst(droppedFormula);
+        if (ast && ast.type === 'binary' && ast.operator === '→') {
+            const conditionalFormula = LogicParser.astToText(ast);
+            const antecedentFormula = LogicParser.astToText(ast.left);
+            const consequentFormula = LogicParser.astToText(ast.right);
+
+            const { currentScopeLevel } = store.getState();
+            const showLineItem = addProofLine(`Show: ${conditionalFormula}`, "Goal (→I)", currentScopeLevel, false, true);
+            if (!showLineItem) {
+                return;
+            }
+
+            const subproofId = showLineItem.dataset.subproofId;
+            const showLineFullId = showLineItem.dataset.lineNumber;
+            const newScopeLevel = currentScopeLevel + 1;
+            store.getState().setCurrentScopeLevel(newScopeLevel);
+
+            const newSubGoal = {
+                goal: consequentFormula,
+                forWff: conditionalFormula,
+                type: "→I",
+                assumptionFormula: antecedentFormula,
+                showLineFullId: showLineFullId,
+                parentLineDisplay: showLineFullId,
+                subLineLetterCode: 97,
+                scope: newScopeLevel,
+                assumptionLineFullId: "",
+                subproofId: subproofId
+            };
+
+            const { subGoalStack } = store.getState();
+            store.getState().updateSubGoalStack([...subGoalStack, newSubGoal]);
+
+            const assumptionLineItem = addProofLine(antecedentFormula, "Assumption (→I)", newScopeLevel, true);
+            if (assumptionLineItem) {
+                const updatedStack = store.getState().subGoalStack;
+                updatedStack[updatedStack.length - 1].assumptionLineFullId = assumptionLineItem.dataset.lineNumber;
+                store.getState().updateSubGoalStack(updatedStack);
+            }
+
+            if (sourceType === 'wff-tray-formula') { EventBus.emit('wff:remove', { elementId: elementId }); }
+            autoAppliedManually = true;
+        } else {
+            EventBus.emit('feedback:show', { message: "→I Error: Dropped formula must be a conditional (φ → ψ).", isError: true });
+            clearSlot(targetSlot);
+        }
+    } else if (ruleName === "MP") ruleApplicationResult = attemptAutoModusPonens(ruleItemElement);
+    else if (ruleName === "MT") ruleApplicationResult = attemptAutoModusTollens(ruleItemElement);
+    else if (ruleName === "AndI") ruleApplicationResult = attemptAutoAndIntroduction(ruleItemElement);
+    else if (ruleName === "AndE") ruleApplicationResult = attemptAutoAndElimination(ruleItemElement);
+    else if (ruleName === "EI") ruleApplicationResult = attemptAutoExistentialIntroduction(ruleItemElement);
+    else if (ruleName === "DN") ruleApplicationResult = attemptAutoDoubleNegation(ruleItemElement);
+    else if (ruleName === "Reiteration" && droppedLineId) {
+        if (addProofLine(droppedFormula, `Re ${droppedLineId}`, currentScopeLevel)) {
+            autoAppliedManually = true;
+        }
+    }
+
+    if (ruleApplicationResult) {
+        const { currentScopeLevel } = store.getState();
+        const newProofLine = addProofLine(ruleApplicationResult.resultFormula, ruleApplicationResult.justificationText, currentScopeLevel);
+        if (newProofLine) {
+            ruleApplicationResult.consumedWffIds.forEach(id => EventBus.emit('wff:remove', { elementId: id }));
+            autoAppliedManually = true;
+        }
+    }
+
+    if (autoAppliedManually) {
+        clearRuleSlots(ruleItemElement);
+        ruleItemElement.classList.remove('active');
+    }
+}
+
+export function setupRuleInteractions() {
+    const { ruleItems } = store.getState();
     ruleItems.forEach(item => {
         item.addEventListener('click', handleRuleItemClick);
         item.addEventListener('dragenter', handleRuleItemDragEnter);

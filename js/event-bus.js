@@ -1,4 +1,4 @@
-const EventBus = {
+export const EventBus = {
   events: {},
   on(event, listener) {
     if (!this.events[event]) {

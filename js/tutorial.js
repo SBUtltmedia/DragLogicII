@@ -1,5 +1,4 @@
-
-const propositionalTutorialSteps = [
+export const propositionalTutorialSteps = [
     {
         element: '#wff-construction-area',
         intro: 'Welcome to the Natural Deduction Contraption! This tutorial will guide you through the basics of solving propositional logic problems.'
@@ -42,10 +41,10 @@ const propositionalTutorialSteps = [
     }
 ];
 
-const folTutorialSteps = [
+export const folTutorialSteps = [
     {
         element: '#wff-construction-area',
-        intro: 'This tutorial will introduce you to the new features for First-Order Logic (FOL).'
+        intro: 'This tutorial will introduce you to the new features for First-Order Logic (FOL).',
     },
     {
         element: '#fol-logic-accordion',
@@ -69,7 +68,7 @@ const folTutorialSteps = [
     }
 ];
 
-function startTutorial(tutorial) {
+export function startTutorial(tutorial) {
     const intro = introJs();
     intro.setOptions({
         steps: tutorial,
@@ -79,10 +78,10 @@ function startTutorial(tutorial) {
     intro.start();
 }
 
-function hasSeenTutorial(tutorialName) {
+export function hasSeenTutorial(tutorialName) {
     return localStorage.getItem(tutorialName);
 }
 
-function markTutorialAsSeen(tutorialName) {
+export function markTutorialAsSeen(tutorialName) {
     localStorage.setItem(tutorialName, 'true');
 }

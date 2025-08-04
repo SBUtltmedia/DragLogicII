@@ -1,4 +1,14 @@
+import { store } from './store.js';
+import { EventBus } from './event-bus.js';
+import { problemSets } from './problems.js';
+import { handleWffDragStart, handleGenericDragEnd, handleDropOnConnectiveHotspot, handleDropOnWffOutputTray, handleDropOnTrashCan, handleDropOnProofArea, handleDropOnRuleSlot, createDragHandler } from './drag-drop.js';
+import { handleRuleItemClick, handleRuleItemDragEnter, handleRuleItemDragLeave } from './rules.js';
+import { handleSubproofToggle, setupProofLineDragging } from './proof.js';
+import { startTutorial, propositionalTutorialSteps, folTutorialSteps } from './tutorial.js';
 
+// --- DOM Element References ---
+// These are cached once and are not part of the state
+let gameWrapper, wffOutputTray, draggableVariables, connectiveHotspots, trashCanDropArea, ruleItems, proofList, proofFeedbackDiv, subGoalDisplayContainer, gameTitle, prevFeedbackBtn, nextFeedbackBtn, zoomInWffBtn, zoomOutWffBtn, helpIcon;
 
 function cacheDomElements() {
     gameWrapper = document.getElementById('game-wrapper');
@@ -15,13 +25,172 @@ function cacheDomElements() {
     nextFeedbackBtn = document.getElementById('next-feedback');
     zoomInWffBtn = document.getElementById('zoom-in-wff');
     zoomOutWffBtn = document.getElementById('zoom-out-wff');
+    helpIcon = document.getElementById('help-icon');
 }
 
-function addEventListeners() {
+// --- Central Render Function ---
+export function render() {
+    const state = store.getState();
+
+    // Render Proof Lines
+    proofList.innerHTML = ''; // Clear existing lines
+    state.proofLines.forEach(lineData => {
+        const listItem = createProofLineElement(lineData);
+        proofList.appendChild(listItem);
+    });
+
+    // Render Problem Info
+    updateProblemDisplay(state.premises, state.goalFormula, state.currentProblem.set, state.currentProblem.number);
+
+    // Render Sub-goal Display
+    updateSubGoalDisplay();
+
+    // Render Feedback
+    displayCurrentFeedback();
+
+    // Render WFF Tray
+    // (Assuming this is handled by other functions for now)
+}
+
+// --- UI Update Functions (Called by Render or directly by events) ---
+
+function createProofLineElement(lineData) {
+    const listItem = document.createElement('li');
+    Object.assign(listItem.dataset, {
+        lineNumber: lineData.lineNumber,
+        scopeLevel: lineData.scopeLevel,
+        isAssumption: lineData.isAssumption,
+        isShowLine: lineData.isShowLine,
+        isProven: lineData.isProven
+    });
+
+    if (lineData.isShowLine) {
+        listItem.classList.add('show-line');
+        listItem.dataset.subproofId = lineData.subproofId;
+    }
+
+    if (lineData.scopeLevel > 0) {
+        listItem.classList.add('subproof-line');
+        listItem.style.marginLeft = `${lineData.scopeLevel * 1.5}rem`;
+        if (lineData.parentSubproofId) {
+            listItem.dataset.parentSubproofId = lineData.parentSubproofId;
+            if (lineData.isAssumption) {
+                 listItem.classList.add('subproof-assumption');
+            }
+        }
+    }
+
+    const formulaDiv = document.createElement('span');
+    formulaDiv.className = 'formula';
+    formulaDiv.dataset.formula = lineData.formula;
+    formulaDiv.draggable = true;
+    // formulaDiv.appendChild(renderFormulaWithDraggableVars(lineData.formula));
+    formulaDiv.textContent = lineData.formula;
+
+    listItem.innerHTML = `<span class="line-number">${lineData.lineNumber}</span>`;
+    listItem.appendChild(formulaDiv);
+    listItem.innerHTML += `<span class="justification">${lineData.justification}</span>`;
+
+    return listItem;
+}
+
+
+function updateProblemDisplay(premises, goalFormula, set, number) {
+    const problemSetInfo = problemSets[set];
+    gameTitle.textContent = `Natural Deduction Contraption - ${problemSetInfo.name} #${number}`;
+
+    const problemInfoDiv = document.getElementById('proof-problem-info');
+    let problemHtml = '';
+    premises.forEach((p, i) => {
+        problemHtml += `<div class="proof-header">Premise ${i + 1}: <span>${p.formula}</span></div>`;
+    });
+    problemHtml += `<div class="proof-goal">Prove: <span>${goalFormula}</span></div>`;
+    problemInfoDiv.innerHTML = problemHtml;
+}
+
+function updateSubGoalDisplay() {
+    const { subGoalStack } = store.getState();
+    subGoalDisplayContainer.innerHTML = '';
+    if (subGoalStack.length > 0) {
+        const {scope, type, assumptionFormula, goal, forWff} = subGoalStack[subGoalStack.length - 1];
+        let goalText = goal;
+        if (type === "RAA") {
+            goalText = "a contradiction (ψ and ~ψ)";
+        }
+        subGoalDisplayContainer.innerHTML = `<div class="subproof-goal-display">Current Sub-Goal (Scope ${scope}, Type: ${type}): <br>Assume: <span>${assumptionFormula}</span><br>Derive: <span>${goalText}</span> (to prove <span>${forWff}</span>)</div>`;
+    }
+}
+
+function displayCurrentFeedback() {
+    const { feedbackHistory, currentFeedbackIndex } = store.getState();
+    if (!proofFeedbackDiv || feedbackHistory.length === 0) {
+        if (proofFeedbackDiv) {
+            proofFeedbackDiv.textContent = "";
+            proofFeedbackDiv.className = 'text-center font-bold flex-grow mx-2';
+        }
+        updateFeedbackNavButtons();
+        return;
+    }
+
+    const { message, type } = feedbackHistory[currentFeedbackIndex];
+
+    proofFeedbackDiv.textContent = message;
+    proofFeedbackDiv.className = 'text-center font-bold flex-grow mx-2'; // Reset classes
+
+    if (type === 'error') proofFeedbackDiv.classList.add('text-red-400');
+    else if (type === 'warning') proofFeedbackDiv.classList.add('text-yellow-400');
+    else proofFeedbackDiv.classList.add('text-green-400');
+
+    updateFeedbackNavButtons();
+}
+
+function updateFeedbackNavButtons() {
+    const { currentFeedbackIndex, feedbackHistory } = store.getState();
+    if (!prevFeedbackBtn || !nextFeedbackBtn) return;
+    prevFeedbackBtn.disabled = currentFeedbackIndex <= 0;
+    nextFeedbackBtn.disabled = currentFeedbackIndex >= feedbackHistory.length - 1;
+}
+
+function renderFormulaWithDraggableVars(formulaString) {
+    const fragment = document.createDocumentFragment();
+    const parts = formulaString.split(/([(),~∧∨→↔∀∃])|([xyz])/).filter(p => p);
+
+    parts.forEach(part => {
+        if (/^[xyz]$/.test(part)) {
+            const span = document.createElement('span');
+            span.className = 'draggable-var fol-variable';
+            span.draggable = true;
+            span.dataset.type = 'fol-variable';
+            span.dataset.symbol = part;
+            span.textContent = part;
+            fragment.appendChild(span);
+        } else {
+            fragment.appendChild(document.createTextNode(part));
+        }
+    });
+    return fragment;
+}
+
+function createDraggableWffInTray(wffData) {
+    if (!wffData.formula || wffData.formula.trim() === "") return;
+    const item = document.createElement('div');
+    item.className = 'formula';
+    item.innerHTML = '';
+    item.appendChild(renderFormulaWithDraggableVars(wffData.formula));
+
+    item.dataset.formula = wffData.formula;
+    item.id = wffData.elementId;
+    item.draggable = true;
+
+    wffOutputTray.appendChild(item);
+}
+
+// --- Event Listeners ---
+export function addEventListeners() {
     cacheDomElements();
-    const helpIcon = document.getElementById('help-icon');
-    window.helpIcon = helpIcon; // Make it globally available for simplicity
+
     helpIcon.addEventListener('click', () => {
+        const { currentProblem } = store.getState();
         const currentProblemSet = currentProblem.set;
         if (currentProblemSet === 1) {
             startTutorial(propositionalTutorialSteps);
@@ -29,31 +198,37 @@ function addEventListeners() {
             startTutorial(folTutorialSteps);
         }
     });
+
     draggableVariables.forEach(v => {
         v.addEventListener('dragstart', handleWffDragStart);
         v.addEventListener('dragend', handleGenericDragEnd);
     });
+
     connectiveHotspots.forEach(spot => {
-        spot.addEventListener('dragover', createDragOverHandler('.connective-hotspot', 'drag-over'));
-        spot.addEventListener('dragleave', createDragLeaveHandler('.connective-hotspot', 'drag-over'));
+        const handler = createDragHandler('.connective-hotspot', 'drag-over');
+        spot.addEventListener('dragover', handler.dragover);
+        spot.addEventListener('dragleave', handler.dragleave);
         spot.addEventListener('drop', handleDropOnConnectiveHotspot);
         spot.dataset.originalText = spot.textContent;
     });
 
+    const wffOutputTrayHandler = createDragHandler('#wff-output-tray', 'drag-over-tray');
     wffOutputTray.addEventListener('dragstart', handleWffDragStart);
     wffOutputTray.addEventListener('dragend', handleGenericDragEnd);
-    wffOutputTray.addEventListener('dragover', createDragOverHandler('#wff-output-tray', 'drag-over-tray'));
-    wffOutputTray.addEventListener('dragleave', createDragLeaveHandler('#wff-output-tray', 'drag-over-tray'));
+    wffOutputTray.addEventListener('dragover', wffOutputTrayHandler.dragover);
+    wffOutputTray.addEventListener('dragleave', wffOutputTrayHandler.dragleave);
     wffOutputTray.addEventListener('drop', handleDropOnWffOutputTray);
 
     if (trashCanDropArea) {
-        trashCanDropArea.addEventListener('dragover', createDragOverHandler('#trash-can-drop-area', 'trash-can-drag-over'));
-        trashCanDropArea.addEventListener('dragleave', createDragLeaveHandler('#trash-can-drop-area', 'trash-can-drag-over'));
+        const trashCanHandler = createDragHandler('#trash-can-drop-area', 'trash-can-drag-over');
+        trashCanDropArea.addEventListener('dragover', trashCanHandler.dragover);
+        trashCanDropArea.addEventListener('dragleave', trashCanHandler.dragleave);
         trashCanDropArea.addEventListener('drop', handleDropOnTrashCan);
     }
 
-    proofList.addEventListener('dragover', createDragOverHandler('ol#proof-lines', 'drag-over-proof'));
-    proofList.addEventListener('dragleave', createDragLeaveHandler('ol#proof-lines', 'drag-over-proof'));
+    const proofListHandler = createDragHandler('ol#proof-lines', 'drag-over-proof');
+    proofList.addEventListener('dragover', proofListHandler.dragover);
+    proofList.addEventListener('dragleave', proofListHandler.dragleave);
     proofList.addEventListener('drop', handleDropOnProofArea);
     proofList.addEventListener('click', handleSubproofToggle);
 
@@ -62,8 +237,9 @@ function addEventListeners() {
         item.addEventListener('dragenter', handleRuleItemDragEnter);
         item.addEventListener('dragleave', handleRuleItemDragLeave);
         item.querySelectorAll('.drop-slot').forEach(slot => {
-            slot.addEventListener('dragover', createDragOverHandler('.drop-slot', 'drag-over'));
-            slot.addEventListener('dragleave', createDragLeaveHandler('.drop-slot', 'drag-over'));
+            const slotHandler = createDragHandler('.drop-slot', 'drag-over');
+            slot.addEventListener('dragover', slotHandler.dragover);
+            slot.addEventListener('dragleave', slotHandler.dragleave);
             slot.addEventListener('drop', (e) => handleDropOnRuleSlot(e, item));
             slot.dataset.placeholder = slot.textContent;
         });
@@ -77,262 +253,122 @@ function addEventListeners() {
         });
     });
 
-    prevFeedbackBtn.addEventListener('click', showPreviousFeedback);
-    nextFeedbackBtn.addEventListener('click', showNextFeedback);
-    zoomInWffBtn.addEventListener('click', () => changeWffTrayZoom(1));
-    zoomOutWffBtn.addEventListener('click', () => changeWffTrayZoom(-1));
+    prevFeedbackBtn.addEventListener('click', () => EventBus.emit('feedback:prev'));
+    nextFeedbackBtn.addEventListener('click', () => EventBus.emit('feedback:next'));
+    zoomInWffBtn.addEventListener('click', () => EventBus.emit('wff:zoom', 1));
+    zoomOutWffBtn.addEventListener('click', () => EventBus.emit('wff:zoom', -1));
 
     gameWrapper.addEventListener('dblclick', handleWrapperZoom);
 
-    setupProofLineDragging();
+    setupProofLineDragging(proofList);
 
-    EventBus.on('feedback:show', (data) => {
-        showFeedback(data.message, data.isError, data.isWarning);
+    // --- Event Bus Subscriptions ---
+    EventBus.on('render', render);
+    EventBus.on('feedback:show', (feedback) => {
+        store.getState().addFeedback(feedback.message, feedback.isError ? 'error' : 'success');
+        displayCurrentFeedback();
     });
-
-    EventBus.on('wff:remove', (data) => {
-        removeWffFromTrayById(data.elementId);
+    EventBus.on('feedback:prev', () => {
+        store.getState().previousFeedback();
+        displayCurrentFeedback();
     });
-}
-
-function updateLayout(wrapperId = 'game-wrapper', targetAspectRatio = 16 / 9, rootFontSizeReferenceWidth = 120) {
-    const wrapper = document.getElementById(wrapperId);
-    if (!wrapper) { console.error(`Wrapper element with ID "${wrapperId}" not found.`); return; }
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    const availableHeight = viewportHeight; const availableWidth = viewportWidth;
-    let wrapperWidth, wrapperHeight;
-    if (availableWidth / availableHeight > targetAspectRatio) {
-        wrapperHeight = availableHeight * 0.98;
-        wrapperWidth = wrapperHeight * targetAspectRatio;
-    } else {
-        wrapperWidth = availableWidth * 0.98;
-        wrapperHeight = wrapperWidth / targetAspectRatio;
-    }
-    wrapperWidth = Math.max(wrapperWidth, 320 * targetAspectRatio);
-    wrapperHeight = Math.max(wrapperHeight, 320);
-    wrapper.style.width = `${wrapperWidth}px`;
-    wrapper.style.height = `${wrapperHeight}px`;
-    const rootFontSize = (wrapperWidth / rootFontSizeReferenceWidth) * 1;
-    document.documentElement.style.fontSize = `${rootFontSize}px`;
-}
-
-function showFeedback(message, isError = false, isWarning = false) {
-    if (!proofFeedbackDiv) return;
-
-    let type = 'success';
-    if (isError) type = 'error';
-    else if (isWarning) type = 'warning';
-
-    // Check if the immediately preceding feedback was an error and this is a success
-    if (type === 'success' && feedbackHistory.length > 0) {
-        const lastFeedback = feedbackHistory[feedbackHistory.length - 1];
-        if (lastFeedback.type === 'error') {
-            message += " (Previous error resolved)";
-        }
-    }
-
-    feedbackHistory.push({ message, type });
-    currentFeedbackIndex = feedbackHistory.length - 1;
-
-    displayCurrentFeedback();
-}
-
-let feedbackClearTimer = null;
-
-function displayCurrentFeedback() {
-    if (!proofFeedbackDiv || feedbackHistory.length === 0) {
+    EventBus.on('feedback:next', () => {
+        store.getState().nextFeedback();
+        displayCurrentFeedback();
+    });
+    EventBus.on('wff:zoom', (direction) => {
+        const currentSize = parseFloat(getComputedStyle(wffOutputTray).getPropertyValue('--wff-font-size-rem'));
+        const newSize = Math.max(0.5, Math.min(2.5, currentSize + direction * 0.1));
+        wffOutputTray.style.setProperty('--wff-font-size-rem', `${newSize}rem`);
+    });
+    
+    EventBus.on('wff:remove', (wffData) => {
+        const el = wffOutputTray.querySelector(`[data-element-id="${wffData.elementId}"]`);
+        if (el) el.remove();
+    });
+    EventBus.on('proof:update', render);
+    EventBus.on('subgoal:update', updateSubGoalDisplay);
+    EventBus.on('problem:loaded', render);
+    EventBus.on('feedback:clear', () => {
+        store.getState().clearFeedback();
+        displayCurrentFeedback();
+    });
+    EventBus.on('game:win', () => {
+        const { currentProblem } = store.getState();
+        const message = `Congratulations! You solved ${problemSets[currentProblem.set].name} #${currentProblem.number}.`;
         if (proofFeedbackDiv) {
-            proofFeedbackDiv.textContent = "";
-            proofFeedbackDiv.className = 'text-center font-bold flex-grow mx-2';
-            proofFeedbackDiv.classList.add('hidden-feedback'); // Hide completely when empty
+            proofFeedbackDiv.textContent = message;
+            proofFeedbackDiv.className = 'text-center font-bold flex-grow mx-2 text-green-400';
         }
-        updateFeedbackNavButtons();
-        return;
-    }
-
-    // Clear any existing timers and classes
-    clearTimeout(feedbackClearTimer);
-    proofFeedbackDiv.classList.remove('fade-out', 'hidden-feedback');
-
-    const { message, type } = feedbackHistory[currentFeedbackIndex];
-
-    proofFeedbackDiv.textContent = message;
-    proofFeedbackDiv.className = 'text-center font-bold flex-grow mx-2'; // Reset classes
-
-    if (type === 'error') proofFeedbackDiv.classList.add('text-red-400');
-    else if (type === 'warning') proofFeedbackDiv.classList.add('text-yellow-400');
-    else proofFeedbackDiv.classList.add('text-green-400');
-
-    updateFeedbackNavButtons();
-
-    // Start fade-out timer for non-error/warning messages
-    if (type === 'success') { // Only fade out success messages automatically
-        feedbackClearTimer = setTimeout(() => {
-            proofFeedbackDiv.classList.add('fade-out');
-            // After transition, hide completely
-            proofFeedbackDiv.addEventListener('transitionend', function handler() {
-                proofFeedbackDiv.classList.add('hidden-feedback');
-                proofFeedbackDiv.removeEventListener('transitionend', handler);
-            }, { once: true });
-        }, 3000); // Message visible for 3 seconds before fading
-    }
-}
-
-function updateFeedbackNavButtons() {
-    if (!prevFeedbackBtn || !nextFeedbackBtn) return;
-    prevFeedbackBtn.disabled = currentFeedbackIndex <= 0;
-    nextFeedbackBtn.disabled = currentFeedbackIndex >= feedbackHistory.length - 1;
-}
-
-function showPreviousFeedback() {
-    if (currentFeedbackIndex > 0) {
-        currentFeedbackIndex--;
-        displayCurrentFeedback();
-    }
-}
-
-function showNextFeedback() {
-    if (currentFeedbackIndex < feedbackHistory.length - 1) {
-        currentFeedbackIndex++;
-        displayCurrentFeedback();
-    }
-}
-
-function changeWffTrayZoom(direction) {
-    const newSize = wffTrayFontSize + (direction * FONT_SIZE_STEP);
-    wffTrayFontSize = Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, newSize));
-    wffOutputTray.style.setProperty('--wff-tray-font-size', `${wffTrayFontSize}rem`);
-}
-
-function handleWrapperZoom(e) {
-    if (e.target.closest('button, .draggable-var, .formula, .rule-item, .connective-hotspot, .accordion-header, #proof-lines li')) {
-        return;
-    }
-
-    const wrapper = e.currentTarget;
-    const isZoomed = wrapper.classList.toggle('zoomed');
-
-    if (isZoomed) {
-        const rect = wrapper.getBoundingClientRect();
-        const x = (e.clientX - rect.left) / rect.width * 100;
-        const y = (e.clientY - rect.top) / rect.height * 100;
-        wrapper.style.transformOrigin = `${x}% ${y}%`;
-    } else {
-        wrapper.style.transformOrigin = ''; // Reset to center
-    }
-}
-
-function clearSlot(slotElement) {
-    if (slotElement) {
-        slotElement.textContent = slotElement.dataset.placeholder || "Drop here...";
-        slotElement.classList.add('text-slate-400', 'italic');
-        delete slotElement.dataset.formula; delete slotElement.dataset.line;
-        delete slotElement.dataset.source; delete slotElement.dataset.elementId;
-    }
-}
-
-function clearRuleSlots(ruleItemElement) { ruleItemElement.querySelectorAll('.drop-slot').forEach(clearSlot); }
-
-function updateSubGoalDisplay() {
-    if (!subGoalDisplayContainer) return;
-    subGoalDisplayContainer.innerHTML = '';
-    if (subGoalStack.length > 0) {
-        const {scope, type, assumptionFormula, goal, forWff} = subGoalStack[subGoalStack.length - 1];
-        let goalText = goal;
-        if (type === "RAA") {
-            goalText = "a contradiction (ψ and ~ψ)";
-        }
-        subGoalDisplayContainer.innerHTML = `<div class="subproof-goal-display">Current Sub-Goal (Scope ${scope}, Type: ${type}): <br>Assume: <span>${assumptionFormula}</span><br>Derive: <span>${goalText}</span> (to prove <span>${forWff}</span>)</div>`;
-    }
-}
-
-function isNegationOf(f1, f2) {
-    const ast1 = LogicParser.textToAst(f1);
-    const ast2 = LogicParser.textToAst(f2);
-    if (!ast1 || !ast2) return false;
-
-    return (ast1.type === 'negation' && LogicParser.areAstsEqual(ast1.operand, ast2)) ||
-           (ast2.type === 'negation' && LogicParser.areAstsEqual(ast2.operand, ast1));
-}
-
-function renderFormulaWithDraggableVars(formulaString) {
-    const fragment = document.createDocumentFragment();
-    // Use regex to split on operators, parens, commas, and variables, keeping them.
-    const parts = formulaString.split(/([(),~∧∨→↔∀∃])|([xyz])/).filter(p => p);
-
-    parts.forEach(part => {
-        if (/^[xyz]$/.test(part)) {
-            const span = document.createElement('span');
-            span.className = 'draggable-var fol-variable'; // This class is for styling consistency
-            span.draggable = true;
-            span.dataset.type = 'fol-variable';
-            span.dataset.symbol = part;
-            span.textContent = part;
-            // Drag listeners are now handled by delegation on the parent tray
-            fragment.appendChild(span);
-        } else {
-            fragment.appendChild(document.createTextNode(part));
+        const nextProblemButton = document.createElement('button');
+        nextProblemButton.textContent = 'Next Problem →';
+        nextProblemButton.className = 'bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded m-2';
+        nextProblemButton.onclick = () => {
+            EventBus.emit('problem:next');
+            nextProblemButton.remove();
+        };
+        if (proofFeedbackDiv && proofFeedbackDiv.parentElement) {
+            proofFeedbackDiv.parentElement.appendChild(nextProblemButton);
         }
     });
-    return fragment;
-}
-
-function createDraggableWffInTray(formula) {
-    if (!formula || formula.trim() === "") return;
-    const item = document.createElement('div');
-    item.className = 'formula';
-    item.innerHTML = ''; // Clear it first
-    item.appendChild(renderFormulaWithDraggableVars(formula));
-
-    item.dataset.formula = formula;
-    item.id = `wff-output-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-    item.draggable = true;
-    // The main drag listeners are delegated to the tray now
-
-    // Add drop listeners for predicate application
-    item.addEventListener('dragover', createDragOverHandler('.formula', 'drag-over'));
-    item.addEventListener('dragleave', createDragLeaveHandler('.formula', 'drag-over'));
-
-    wffOutputTray.appendChild(item);
-}
-
-function clearWffInProgress() {
-    firstOperandWFF = null;
-    if (waitingConnectiveWFF && connectiveHotspots) {
+    EventBus.on('ui:resetHotspots', () => {
+        if (!connectiveHotspots) return;
         connectiveHotspots.forEach(spot => {
             if (spot.classList.contains('waiting')) {
                 spot.classList.remove('waiting');
                 spot.textContent = spot.dataset.originalText || spot.dataset.connective;
             }
         });
-    }
-    waitingConnectiveWFF = null;
-}
-
-function removeWffFromTrayById(elementId) {
-    if (!elementId) { return; }
-    const elToRemove = document.getElementById(elementId);
-    if (elToRemove && elToRemove.parentNode === wffOutputTray) {
-        wffOutputTray.removeChild(elToRemove);
-        if (draggedElementForRemoval && draggedElementForRemoval.id === elementId) {
-            draggedElementForRemoval = null;
-        }
-    }
-}
-
-function updateLogicUIVisibility() {
-    const isFolProblem = currentProblem.set === 2;
-
-    // Toggle accordion sections
-    document.getElementById('prop-logic-accordion').classList.remove('disabled-section'); // Always enable prop logic constructor
-    document.getElementById('fol-logic-accordion').classList.toggle('disabled-section', !isFolProblem);
-
-    // Toggle rule items
-    document.querySelectorAll('.rule-item').forEach(item => {
-        const logicType = item.dataset.logicType;
-        if (logicType === 'fol') {
-            item.classList.toggle('disabled-section', !isFolProblem);
-        }
     });
 }
+
+function handleWrapperZoom(e) {
+    if (e.target.closest('button, .draggable-var, .formula, .rule-item, .connective-hotspot, .accordion-header, #proof-lines li')) {
+        return;
+    }
+    gameWrapper.classList.toggle('zoomed');
+}
+
+EventBus.on('game:win', () => {
+    const { currentProblem } = store.getState();
+    const message = `Congratulations! You solved ${problemSets[currentProblem.set].name} #${currentProblem.number}.`;
+
+    // Directly update the feedback div to ensure the win message is seen
+    if (proofFeedbackDiv) {
+        proofFeedbackDiv.textContent = message;
+        proofFeedbackDiv.className = 'text-center font-bold flex-grow mx-2 text-green-400';
+    }
+
+    // Create and show a "Next Problem" button
+    const nextProblemButton = document.createElement('button');
+    nextProblemButton.textContent = 'Next Problem →';
+    nextProblemButton.className = 'bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded m-2';
+    nextProblemButton.onclick = () => {
+        EventBus.emit('problem:next');
+        nextProblemButton.remove(); // Remove button after click
+    };
+
+    // Append it to the feedback container
+    if (proofFeedbackDiv && proofFeedbackDiv.parentElement) {
+        proofFeedbackDiv.parentElement.appendChild(nextProblemButton);
+    }
+});
+
+EventBus.on('ui:resetHotspots', () => {
+    if (!connectiveHotspots) return;
+    connectiveHotspots.forEach(spot => {
+        if (spot.classList.contains('waiting')) {
+            spot.classList.remove('waiting');
+            spot.textContent = spot.dataset.originalText || spot.dataset.connective;
+        }
+    });
+});
+
+EventBus.on('wff:add', (wffData) => {
+    createDraggableWffInTray(wffData);
+});
+
+EventBus.on('wff:remove', (wffData) => {
+    const el = wffOutputTray.querySelector(`[data-element-id="${wffData.elementId}"]`);
+    if (el) el.remove();
+});

@@ -1,4 +1,4 @@
-const LogicParser = (() => {
+export const LogicParser = (() => {
     const operators = {
         '=': { prec: 5, assoc: 'left' },
         '~': { prec: 4, assoc: 'right' },
@@ -165,6 +165,7 @@ const LogicParser = (() => {
         textToAst: (text) => {
             if (typeof text !== 'string') {
                 console.error("Parser Error: Input is not a string.", text);
+        EventBus.emit('feedback:show', { message: `Parser Error: Input is not a string: ${text}`, isError: true });
                 return null;
             }
             try {
@@ -174,12 +175,17 @@ const LogicParser = (() => {
             }
             catch (e) {
                 console.error("Parsing Error:", e.message, "for formula:", text);
+        EventBus.emit('feedback:show', { message: `Parsing Error: ${e.message} for formula: ${text}`, isError: true });
                 return null;
             }
         },
         astToText: (ast) => {
              try { return fromAst(ast); }
-             catch (e) { console.error("AST-to-Text Error:", e.message, "for ast:", ast); return ''; }
+             catch (e) { 
+            console.error("AST-to-Text Error:", e.message, "for ast:", ast); 
+            EventBus.emit('feedback:show', { message: `AST-to-Text Error: ${e.message}`, isError: true });
+            return ''; 
+        }
         },
         areAstsEqual: areEqual,
         tokenize: tokenize // Expose tokenize for rendering
