@@ -1,21 +1,19 @@
 import { store } from './store.js';
 import { EventBus } from './event-bus.js';
 import { problemSets } from './problems.js';
+import { ruleSet, handleRuleItemClick, handleRuleItemDragEnter, handleRuleItemDragLeave } from './rules.js';
 import { handleWffDragStart, handleGenericDragEnd, handleDropOnConnectiveHotspot, handleDropOnWffOutputTray, handleDropOnTrashCan, handleDropOnProofArea, handleDropOnRuleSlot, createDragHandler } from './drag-drop.js';
-import { handleRuleItemClick, handleRuleItemDragEnter, handleRuleItemDragLeave } from './rules.js';
 import { handleSubproofToggle, setupProofLineDragging } from './proof.js';
 import { startTutorial, propositionalTutorialSteps, folTutorialSteps } from './tutorial.js';
 
 // --- DOM Element References ---
-// These are cached once and are not part of the state
-let wffOutputTray, draggableVariables, connectiveHotspots, trashCanDropArea, ruleItems, proofList, proofFeedbackDiv, subGoalDisplayContainer, gameTitle, prevFeedbackBtn, nextFeedbackBtn, zoomInWffBtn, zoomOutWffBtn, helpIcon;
+let wffOutputTray, draggableVariables, connectiveHotspots, trashCanDropArea, proofList, proofFeedbackDiv, subGoalDisplayContainer, gameTitle, prevFeedbackBtn, nextFeedbackBtn, zoomInWffBtn, zoomOutWffBtn, helpIcon, subproofsArea, inferenceRulesArea;
 
 function cacheDomElements() {
     wffOutputTray = document.getElementById('wff-output-tray');
     draggableVariables = document.querySelectorAll('.draggable-var');
     connectiveHotspots = document.querySelectorAll('.connective-hotspot');
     trashCanDropArea = document.getElementById('trash-can-drop-area');
-    ruleItems = document.querySelectorAll('.rule-item');
     proofList = document.getElementById('proof-lines');
     proofFeedbackDiv = document.getElementById('proof-feedback');
     subGoalDisplayContainer = document.getElementById('subproof-goal-display-container');
@@ -25,33 +23,80 @@ function cacheDomElements() {
     zoomInWffBtn = document.getElementById('zoom-in-wff');
     zoomOutWffBtn = document.getElementById('zoom-out-wff');
     helpIcon = document.getElementById('help-icon');
+    subproofsArea = document.getElementById('subproofs-area');
+    inferenceRulesArea = document.getElementById('inference-rules-area');
 }
 
 // --- Central Render Function ---
 export function render() {
     const state = store.getState();
 
-    // Render Proof Lines
+    renderRules();
+    renderProofLines(state.proofLines);
+    updateProblemDisplay(state.premises, state.goalFormula, state.currentProblem.set, state.currentProblem.number);
+    updateSubGoalDisplay();
+    displayCurrentFeedback();
+    renderWffTray(state.wffTray);
+}
+
+// --- UI Update Functions ---
+
+function renderRules() {
+    subproofsArea.innerHTML = '<h2>Subproofs</h2>';
+    inferenceRulesArea.innerHTML = '<h2>Inference Rules</h2>';
+
+    for (const ruleKey in ruleSet) {
+        const rule = ruleSet[ruleKey];
+        const ruleElement = createRuleElement(ruleKey, rule);
+        if (rule.isSubproof) {
+            subproofsArea.appendChild(ruleElement);
+        } else {
+            inferenceRulesArea.appendChild(ruleElement);
+        }
+    }
+    // Re-add event listeners to the newly created rule elements
+    addRuleEventListeners();
+}
+
+function createRuleElement(ruleKey, rule) {
+    const ruleElement = document.createElement('div');
+    ruleElement.className = 'rule-item';
+    ruleElement.dataset.rule = ruleKey;
+    ruleElement.dataset.premises = rule.premises;
+    if (rule.logicType) {
+        ruleElement.dataset.logicType = rule.logicType;
+    }
+    ruleElement.setAttribute('role', 'button');
+    ruleElement.setAttribute('tabindex', '0');
+    ruleElement.textContent = rule.name;
+
+    const slotsContainer = document.createElement('div');
+    slotsContainer.className = 'rule-slots';
+    rule.slots.forEach((slot, index) => {
+        const slotElement = document.createElement('div');
+        slotElement.className = 'drop-slot';
+        slotElement.dataset.premiseIndex = index;
+        slotElement.dataset.placeholder = slot.placeholder;
+        if (slot.expectedPattern) {
+            slotElement.dataset.expectedPattern = slot.expectedPattern;
+        }
+        slotElement.setAttribute('role', 'region');
+        slotElement.setAttribute('aria-dropeffect', 'copy');
+        slotElement.textContent = slot.placeholder;
+        slotsContainer.appendChild(slotElement);
+    });
+
+    ruleElement.appendChild(slotsContainer);
+    return ruleElement;
+}
+
+function renderProofLines(proofLines) {
     proofList.innerHTML = ''; // Clear existing lines
-    state.proofLines.forEach(lineData => {
+    proofLines.forEach(lineData => {
         const listItem = createProofLineElement(lineData);
         proofList.appendChild(listItem);
     });
-
-    // Render Problem Info
-    updateProblemDisplay(state.premises, state.goalFormula, state.currentProblem.set, state.currentProblem.number);
-
-    // Render Sub-goal Display
-    updateSubGoalDisplay();
-
-    // Render Feedback
-    displayCurrentFeedback();
-
-    // Render WFF Tray
-    // (Assuming this is handled by other functions for now)
 }
-
-// --- UI Update Functions (Called by Render or directly by events) ---
 
 function createProofLineElement(lineData) {
     const listItem = document.createElement('li');
@@ -83,8 +128,7 @@ function createProofLineElement(lineData) {
     formulaDiv.className = 'formula';
     formulaDiv.dataset.formula = lineData.formula;
     formulaDiv.draggable = true;
-    // formulaDiv.appendChild(renderFormulaWithDraggableVars(lineData.formula));
-    formulaDiv.textContent = lineData.formula;
+    formulaDiv.appendChild(renderFormulaWithDraggableVars(lineData.formula));
 
     listItem.innerHTML = `<span class="line-number">${lineData.lineNumber}</span>`;
     listItem.appendChild(formulaDiv);
@@ -170,18 +214,20 @@ function renderFormulaWithDraggableVars(formulaString) {
     return fragment;
 }
 
-function createDraggableWffInTray(wffData) {
-    if (!wffData.formula || wffData.formula.trim() === "") return;
-    const item = document.createElement('div');
-    item.className = 'formula';
-    item.innerHTML = '';
-    item.appendChild(renderFormulaWithDraggableVars(wffData.formula));
+function renderWffTray(wffTray) {
+    wffOutputTray.innerHTML = '';
+    wffTray?.forEach(wffData => {
+        const item = document.createElement('div');
+        item.className = 'formula';
+        item.innerHTML = '';
+        item.appendChild(renderFormulaWithDraggableVars(wffData.formula));
 
-    item.dataset.formula = wffData.formula;
-    item.id = wffData.elementId;
-    item.draggable = true;
+        item.dataset.formula = wffData.formula;
+        item.id = wffData.elementId;
+        item.draggable = true;
 
-    wffOutputTray.appendChild(item);
+        wffOutputTray.appendChild(item);
+    });
 }
 
 // --- Event Listeners ---
@@ -231,18 +277,7 @@ export function addEventListeners() {
     proofList.addEventListener('drop', handleDropOnProofArea);
     proofList.addEventListener('click', handleSubproofToggle);
 
-    ruleItems.forEach(item => {
-        item.addEventListener('click', handleRuleItemClick);
-        item.addEventListener('dragenter', handleRuleItemDragEnter);
-        item.addEventListener('dragleave', handleRuleItemDragLeave);
-        item.querySelectorAll('.drop-slot').forEach(slot => {
-            const slotHandler = createDragHandler('.drop-slot', 'drag-over');
-            slot.addEventListener('dragover', slotHandler.dragover);
-            slot.addEventListener('dragleave', slotHandler.dragleave);
-            slot.addEventListener('drop', (e) => handleDropOnRuleSlot(e, item));
-            slot.dataset.placeholder = slot.textContent;
-        });
-    });
+    addRuleEventListeners();
 
     document.querySelectorAll('.accordion-header').forEach(header => {
         header.addEventListener('click', () => {
@@ -280,7 +315,7 @@ export function addEventListeners() {
     });
     
     EventBus.on('wff:remove', (wffData) => {
-        const el = wffOutputTray.querySelector(`[data-element-id="${wffData.elementId}"]`);
+        const el = wffOutputTray.querySelector(`[id="${wffData.elementId}"]`);
         if (el) el.remove();
     });
     EventBus.on('proof:update', render);
@@ -317,50 +352,31 @@ export function addEventListeners() {
             }
         });
     });
+    EventBus.on('wff:add', (wffData) => {
+        store.getState().addWff(wffData);
+    });
+    EventBus.on('wff:remove', (wffData) => {
+        store.getState().removeWff(wffData.elementId);
+    });
+    EventBus.on('rules:activate', (ruleElement) => {
+        document.querySelectorAll('.rule-item').forEach(item => item.classList.remove('active'));
+        ruleElement.classList.add('active');
+    });
+    EventBus.on('rules:deactivate', () => {
+        document.querySelectorAll('.rule-item').forEach(item => item.classList.remove('active'));
+    });
 }
 
-
-
-EventBus.on('game:win', () => {
-    const { currentProblem } = store.getState();
-    const message = `Congratulations! You solved ${problemSets[currentProblem.set].name} #${currentProblem.number}.`;
-
-    // Directly update the feedback div to ensure the win message is seen
-    if (proofFeedbackDiv) {
-        proofFeedbackDiv.textContent = message;
-        proofFeedbackDiv.className = 'text-center font-bold flex-grow mx-2 text-green-400';
-    }
-
-    // Create and show a "Next Problem" button
-    const nextProblemButton = document.createElement('button');
-    nextProblemButton.textContent = 'Next Problem →';
-    nextProblemButton.className = 'bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded m-2';
-    nextProblemButton.onclick = () => {
-        EventBus.emit('problem:next');
-        nextProblemButton.remove(); // Remove button after click
-    };
-
-    // Append it to the feedback container
-    if (proofFeedbackDiv && proofFeedbackDiv.parentElement) {
-        proofFeedbackDiv.parentElement.appendChild(nextProblemButton);
-    }
-});
-
-EventBus.on('ui:resetHotspots', () => {
-    if (!connectiveHotspots) return;
-    connectiveHotspots.forEach(spot => {
-        if (spot.classList.contains('waiting')) {
-            spot.classList.remove('waiting');
-            spot.textContent = spot.dataset.originalText || spot.dataset.connective;
-        }
+function addRuleEventListeners() {
+    document.querySelectorAll('.rule-item').forEach(item => {
+        item.addEventListener('click', handleRuleItemClick);
+        item.addEventListener('dragenter', handleRuleItemDragEnter);
+        item.addEventListener('dragleave', handleRuleItemDragLeave);
+        item.querySelectorAll('.drop-slot').forEach(slot => {
+            const slotHandler = createDragHandler('.drop-slot', 'drag-over');
+            slot.addEventListener('dragover', slotHandler.dragover);
+            slot.addEventListener('dragleave', slotHandler.dragleave);
+            slot.addEventListener('drop', (e) => handleDropOnRuleSlot(e, item));
+        });
     });
-});
-
-EventBus.on('wff:add', (wffData) => {
-    createDraggableWffInTray(wffData);
-});
-
-EventBus.on('wff:remove', (wffData) => {
-    const el = wffOutputTray.querySelector(`[data-element-id="${wffData.elementId}"]`);
-    if (el) el.remove();
-});
+}

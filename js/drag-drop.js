@@ -2,6 +2,7 @@ import { store } from './store.js';
 import { EventBus } from './event-bus.js';
 import { LogicParser } from './parser.js';
 import { isNegationOf } from './proof.js';
+import { ruleSet } from './rules.js';
 
 const DRAG_DATA_TYPE = 'application/x-nd-drag-data';
 
@@ -9,7 +10,6 @@ const DRAG_DATA_TYPE = 'application/x-nd-drag-data';
 function clearWffInProgress() {
     store.getState().setFirstOperandWFF(null);
     store.getState().setWaitingConnectiveWFF(null);
-    // We also need to visually reset any waiting hotspots
     EventBus.emit('ui:resetHotspots');
 }
 
@@ -58,7 +58,7 @@ export function createDragHandler(targetSelector, dragOverClass, allowedDataType
 }
 
 export function handleWffDragStart(e) {
-    e.stopPropagation(); // Stop bubbling immediately!
+    e.stopPropagation();
 
     const target = e.target.closest('.draggable-var, .formula');
     if (!target) return;
@@ -89,9 +89,7 @@ export function handleWffDragStart(e) {
 }
 
 export function handleGenericDragEnd(e) {
-    // Remove the dragging class from ALL elements to be safe.
     document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
-    // Also remove drag-over from any potential drop targets
     document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
 }
 
@@ -147,7 +145,6 @@ export function handleDropOnConnectiveHotspot(e) {
         return;
     }
 
-    // --- Handle Propositional Connectives ---
     const { firstOperandWFF, waitingConnectiveWFF } = store.getState();
     const droppedAst = LogicParser.textToAst(droppedFormula);
     if (!droppedAst) { EventBus.emit('feedback:show', { message: "Invalid formula dropped.", isError: true }); return; }
@@ -183,31 +180,26 @@ export function handleDropOnWffOutputTray(e) {
     const data = getDragData(e);
     if (!data || !data.formula) { return; }
 
-    // Handle dropping on an existing formula (for predicate application)
     const targetFormulaDiv = e.target.closest('.formula');
     if (targetFormulaDiv && targetFormulaDiv.parentElement === wffOutputTray) {
          targetFormulaDiv.classList.remove('drag-over');
          if (data.sourceType === 'fol-variable') {
             const targetAst = LogicParser.textToAst(targetFormulaDiv.dataset.formula);
             if (targetAst && targetAst.type === 'predicate') {
-                // **FIX**: Create new formula but leave original F
                 const newArgs = [...targetAst.args, { type: 'variable', value: data.symbol }];
                 const newAst = { ...targetAst, args: newArgs };
                 EventBus.emit('wff:add', { formula: LogicParser.astToText(newAst), elementId: `wff-tray-${Date.now()}` });
             } else {
                  EventBus.emit('feedback:show', { message: "Can only drop FOL variables onto predicates.", isError: true });
             }
-            return; // Stop processing here
+            return; 
          }
     }
 
-
-    // Handle dropping a new item into the tray
     if (['prop-variable', 'predicate', 'fol-variable'].includes(data.sourceType)) {
-         // The wff:add event is now responsible for creating the element
+        EventBus.emit('wff:add', { formula: data.formula, elementId: `wff-tray-${Date.now()}` });
     } else if (data.sourceType === 'wff-tray-formula') {
-        // This case handles reordering items in the tray.
-        // The dragged item is removed on 'drop' on a valid target, so nothing to do here.
+        // Reordering logic can be implemented here if needed
     }
 }
 
@@ -238,7 +230,7 @@ export function handleDragStartProofLine(e) {
         e.preventDefault(); 
         return; 
     }
-    if (isProvenStr !== 'true' && !isAssumption(lineItem)) {
+    if (isProvenStr !== 'true' && lineItem.dataset.isAssumption !== 'true') {
         EventBus.emit('feedback:show', { message: "Cannot use unproven 'Show' line as premise.", isError: true }); 
         e.preventDefault(); 
         return;
@@ -264,7 +256,6 @@ export function handleDropOnProofArea(e) {
 
     const targetLi = e.target.closest('li[data-line-number]');
 
-    // If from constructor (tray or button) and dropped on the main proof area...
     if ((data.sourceType.includes('variable') || data.sourceType.includes('predicate') || data.sourceType === 'wff-tray-formula') && !targetLi) {
         EventBus.emit('rule:apply', { ruleName: 'RAA', droppedFormula: data.formula, elementId: data.elementId, sourceType: data.sourceType });
     } else if (data.sourceType === 'proof-line-formula') {
@@ -285,9 +276,9 @@ export function handleDropOnProofArea(e) {
                 }
             }
 
-            EventBus.emit('proof:reiterate', { formula: draggedFormulaText, lineId: draggedLineId, scope: draggedScope });
+            EventBus.emit('rule:apply', { ruleName: 'Reiteration', droppedFormula: draggedFormulaText, droppedLineId: draggedLineId, droppedScope: draggedScope });
         } else {
-            EventBus.emit('proof:reiterate', { formula: draggedFormulaText, lineId: draggedLineId, scope: draggedScope });
+            EventBus.emit('rule:apply', { ruleName: 'Reiteration', droppedFormula: draggedFormulaText, droppedLineId: draggedLineId, droppedScope: draggedScope });
         }
     }
 }
@@ -298,30 +289,34 @@ export function handleDropOnRuleSlot(e, ruleItemElement) {
     if (!targetSlot) return;
     targetSlot.classList.remove('drag-over');
     const data = getDragData(e);
-
-    // Allow drops from the WFF tray only onto subproof-initiating rules.
-    const subproofRules = ['CI', 'UI']; // Add other subproof rule data-names here
-    if (data.sourceType === 'wff-tray-formula' && !subproofRules.includes(ruleItemElement.dataset.rule)) {
-        EventBus.emit('feedback:show', { message: "That rule requires lines that are already in the proof.", isError: true });
-        return;
-    }
-
     if (!data || !data.formula) {
         EventBus.emit('feedback:show', { message: 'Drop Error!', isError: true });
-        setTimeout(() => clearSlot(targetSlot), 1500);
         return;
     }
-    const { formula: droppedFormula, lineId: droppedLineId, scopeLevel: droppedScopeNum, elementId: droppedElementId } = data;
-    const droppedScope = data.sourceType === 'proof-line-formula' ? droppedScopeNum : -1;
 
-    EventBus.emit('rule:apply', {
-        ruleName: ruleItemElement.dataset.rule,
-        droppedFormula: droppedFormula,
-        droppedLineId: droppedLineId,
-        droppedScope: droppedScope,
-        elementId: droppedElementId,
+    const ruleName = ruleItemElement.dataset.rule;
+    const rule = ruleSet[ruleName];
+    if (!rule) return;
+
+    const premiseIndex = parseInt(targetSlot.dataset.premiseIndex, 10);
+    const slotDefinition = rule.slots[premiseIndex];
+
+    if (slotDefinition.accepts && !slotDefinition.accepts.includes(data.sourceType)) {
+        EventBus.emit('feedback:show', { message: `Invalid drop. This slot only accepts: ${slotDefinition.accepts.join(', ')}.`, isError: true });
+        return;
+    }
+
+    // Standardize the event payload
+    const eventPayload = {
+        ruleName,
+        droppedFormula: data.formula,
+        droppedLineId: data.lineId,
+        droppedScope: data.scopeLevel,
+        elementId: data.elementId,
         sourceType: data.sourceType,
-        targetSlot: targetSlot,
-        ruleItemElement: ruleItemElement
-    });
+        targetSlot,
+        ruleItemElement
+    };
+
+    EventBus.emit('rule:apply', eventPayload);
 }

@@ -13,19 +13,80 @@ export function isNegationOf(f1, f2) {
            (ast2.type === 'negation' && LogicParser.areAstsEqual(ast2.operand, ast1));
 }
 
-function startRAA(wffToProve) {
-    const { currentScopeLevel } = store.getState();
-    const goalAst = LogicParser.textToAst(wffToProve);
-    if (!goalAst) {
-        EventBus.emit('feedback:show', { message: "Cannot start RAA: Invalid formula.", isError: true });
-        return;
+function isAssumption(lineItem) { 
+    return lineItem && lineItem.dataset.isAssumption === 'true'; 
+}
+
+// --- Proof Line Management ---
+
+/**
+ * Creates a new proof line object and adds it to the store.
+ * This is the single, authoritative way to add a line to the proof.
+ * @returns {object} The line data object that was created.
+ */
+export function addProofLine(formula, justification, scopeLevel, isAssumptionFlag = false, isShowLineFlag = false) {
+    const { nextLineNumberGlobal, subGoalStack, proofLines } = store.getState();
+    const cleanFormula = formula.trim();
+
+    // Prevent adding duplicate proven lines in the same scope
+    if (!isShowLineFlag && !isAssumptionFlag) {
+        const formulaAst = LogicParser.textToAst(cleanFormula);
+        const existingLines = proofLines.filter(line => line.scopeLevel === scopeLevel && line.isProven);
+        for (const line of existingLines) {
+            const existingAst = LogicParser.textToAst(line.formula);
+            if (existingAst && formulaAst && LogicParser.areAstsEqual(existingAst, formulaAst)) {
+                EventBus.emit('feedback:show', { message: "This line already exists and is proven in the current scope.", isError: true });
+                return null;
+            }
+        }
     }
 
-    const showLineItem = addProofLine(`Show: ${wffToProve}`, "Goal (RAA)", currentScopeLevel, false, true);
-    if (!showLineItem) return;
+    let displayLineStr, dataLineId;
+    if (scopeLevel === 0) {
+        displayLineStr = `${nextLineNumberGlobal}.`;
+        dataLineId = `${nextLineNumberGlobal}`;
+        store.getState().setNextLineNumber(nextLineNumberGlobal + 1);
+    } else {
+        const activeSubProof = subGoalStack[subGoalStack.length - 1];
+        if (!activeSubProof) {
+            EventBus.emit('feedback:show', { message: "Proof Error: No active subproof!", isError: true });
+            return null;
+        }
+        const subLetter = String.fromCharCode(activeSubProof.subLineLetterCode);
+        activeSubProof.subLineLetterCode++; // Increment for the next line
+        displayLineStr = `${activeSubProof.parentLineDisplay}.${subLetter}`;
+        dataLineId = displayLineStr;
+        store.getState().updateSubGoalStack(subGoalStack);
+    }
 
-    const subproofId = showLineItem.dataset.subproofId;
-    const showLineFullId = showLineItem.dataset.lineNumber;
+    const lineData = {
+        lineNumber: dataLineId,
+        formula: cleanFormula,
+        justification,
+        scopeLevel,
+        isAssumption: isAssumptionFlag,
+        isShowLine: isShowLineFlag,
+        isProven: !isShowLineFlag && !isAssumptionFlag,
+        subproofId: isShowLineFlag ? `subproof-${dataLineId.replace('.', '-')}` : null,
+        parentSubproofId: scopeLevel > 0 ? subGoalStack[subGoalStack.length - 1]?.subproofId : null
+    };
+
+    store.getState().addProofLine(lineData);
+    checkWinCondition();
+    return lineData;
+}
+
+// --- Subproof Management ---
+
+export function startRAA(goalAst) {
+    const { currentScopeLevel } = store.getState();
+    const wffToProve = LogicParser.astToText(goalAst);
+
+    // 1. Add the "Show" line
+    const showLineData = addProofLine(`Show: ${wffToProve}`, "Goal (RAA)", currentScopeLevel, false, true);
+    if (!showLineData) return; // Stop if the line couldn't be added
+
+    // 2. Update state for the new subproof
     const newScopeLevel = currentScopeLevel + 1;
     store.getState().setCurrentScopeLevel(newScopeLevel);
 
@@ -36,21 +97,20 @@ function startRAA(wffToProve) {
         forWff: wffToProve,
         type: "RAA",
         assumptionFormula: assumptionFormula,
-        showLineFullId: showLineFullId,
-        parentLineDisplay: showLineFullId,
-        subLineLetterCode: 97,
+        showLineFullId: showLineData.lineNumber,
+        parentLineDisplay: showLineData.lineNumber,
+        subLineLetterCode: 97, // 'a'
         scope: newScopeLevel,
         assumptionLineFullId: "",
-        subproofId: subproofId
+        subproofId: showLineData.subproofId
     };
+    store.getState().updateSubGoalStack([...store.getState().subGoalStack, newSubGoal]);
 
-    const { subGoalStack } = store.getState();
-    store.getState().updateSubGoalStack([...subGoalStack, newSubGoal]);
-
-    const assumptionLineItem = addProofLine(assumptionFormula, "Assumption (RAA)", newScopeLevel, true);
-    if (assumptionLineItem) {
+    // 3. Add the assumption line
+    const assumptionLineData = addProofLine(assumptionFormula, "Assumption (RAA)", newScopeLevel, true);
+    if (assumptionLineData) {
         const updatedStack = store.getState().subGoalStack;
-        updatedStack[updatedStack.length - 1].assumptionLineFullId = assumptionLineItem.dataset.lineNumber;
+        updatedStack[updatedStack.length - 1].assumptionLineFullId = assumptionLineData.lineNumber;
         store.getState().updateSubGoalStack(updatedStack);
     }
 
@@ -58,8 +118,48 @@ function startRAA(wffToProve) {
     EventBus.emit('subgoal:update');
 }
 
-function dischargeRAA(subproofDetails, contradictoryLine1Id, contradictoryLine2Id) {
-    if (!subproofDetails || subproofDetails.type !== "RAA") return;
+export function startConditionalIntroduction(conditionalAst) {
+    const { currentScopeLevel } = store.getState();
+    const conditionalFormula = LogicParser.astToText(conditionalAst);
+    const antecedentFormula = LogicParser.astToText(conditionalAst.left);
+    const consequentFormula = LogicParser.astToText(conditionalAst.right);
+
+    // 1. Add the "Show" line
+    const showLineData = addProofLine(`Show: ${conditionalFormula}`, "Goal (→I)", currentScopeLevel, false, true);
+    if (!showLineData) return;
+
+    // 2. Update state for the new subproof
+    const newScopeLevel = currentScopeLevel + 1;
+    store.getState().setCurrentScopeLevel(newScopeLevel);
+
+    const newSubGoal = {
+        goal: consequentFormula,
+        forWff: conditionalFormula,
+        type: "→I",
+        assumptionFormula: antecedentFormula,
+        showLineFullId: showLineData.lineNumber,
+        parentLineDisplay: showLineData.lineNumber,
+        subLineLetterCode: 97, // 'a'
+        scope: newScopeLevel,
+        assumptionLineFullId: "",
+        subproofId: showLineData.subproofId
+    };
+    store.getState().updateSubGoalStack([...store.getState().subGoalStack, newSubGoal]);
+
+    // 3. Add the assumption line
+    const assumptionLineData = addProofLine(antecedentFormula, "Assumption (→I)", newScopeLevel, true);
+    if (assumptionLineData) {
+        const updatedStack = store.getState().subGoalStack;
+        updatedStack[updatedStack.length - 1].assumptionLineFullId = assumptionLineData.lineNumber;
+        store.getState().updateSubGoalStack(updatedStack);
+    }
+
+    EventBus.emit('feedback:show', { message: `Subproof (→I): Assume ${antecedentFormula}. Derive ${consequentFormula}.`, isError: false });
+    EventBus.emit('subgoal:update');
+}
+
+function dischargeRAA({ subproof, line1, line2 }) {
+    if (!subproof || subproof.type !== "RAA") return;
 
     const { proofLines } = store.getState();
     const dischargedSubproof = store.getState().subGoalStack.pop();
@@ -69,11 +169,11 @@ function dischargeRAA(subproofDetails, contradictoryLine1Id, contradictoryLine2I
     if (showLineIndex === -1) {
         store.getState().setCurrentScopeLevel(parentScopeLevel);
         EventBus.emit('subgoal:update');
-        addProofLine(dischargedSubproof.forWff, `RAA ${dischargedSubproof.assumptionLineFullId} (${contradictoryLine1Id},${contradictoryLine2Id})`, parentScopeLevel);
+        addProofLine(dischargedSubproof.forWff, `RAA ${dischargedSubproof.assumptionLineFullId} (${line1},${line2})`, parentScopeLevel);
         return;
     }
 
-    const justificationText = `RAA ${dischargedSubproof.assumptionLineFullId} (${contradictoryLine1Id}, ${contradictoryLine2Id})`;
+    const justificationText = `RAA ${dischargedSubproof.assumptionLineFullId} (${line1}, ${line2})`;
 
     const updatedProofLines = [...proofLines];
     const showLine = updatedProofLines[showLineIndex];
@@ -91,99 +191,24 @@ function dischargeRAA(subproofDetails, contradictoryLine1Id, contradictoryLine2I
     checkWinCondition();
 }
 
-EventBus.on('proof:startRAA', ({ formula }) => startRAA(formula));
-EventBus.on('proof:dischargeRAA', ({ subproof, line1, line2 }) => dischargeRAA(subproof, line1, line2));
+EventBus.on('proof:dischargeRAA', dischargeRAA);
 
 
 export function checkWinCondition() {
-    console.log('[checkWinCondition] Running check...');
     const { proofLines, goalFormula } = store.getState();
     const goalAst = LogicParser.textToAst(goalFormula);
-
-    if (!goalAst) {
-        console.error('[checkWinCondition] Could not parse goalFormula:', goalFormula);
-        return;
-    }
-    console.log(`[checkWinCondition] Goal is: "${goalFormula}"`);
+    if (!goalAst) return;
 
     for (const line of proofLines) {
-        console.log(`[checkWinCondition] Checking line #${line.lineNumber}: Formula="${line.formula}", Scope=${line.scopeLevel}, Proven=${line.isProven}`);
         if (line.scopeLevel === 0 && line.isProven) {
             const lineAst = LogicParser.textToAst(line.formula);
-            if (lineAst) {
-                const areEqual = LogicParser.areAstsEqual(lineAst, goalAst);
-                console.log(`[checkWinCondition] ...Line #${line.lineNumber} is at scope 0 and proven. Comparing with goal. Result: ${areEqual}`);
-                if (areEqual) {
-                    console.log('[checkWinCondition] WIN CONDITION MET!');
-                    EventBus.emit('game:win');
-                    return true; // Win condition met
-                }
-            } else {
-                console.warn(`[checkWinCondition] ...Could not parse line #${line.lineNumber} formula: "${line.formula}"`);
+            if (lineAst && LogicParser.areAstsEqual(lineAst, goalAst)) {
+                EventBus.emit('game:win');
+                return true;
             }
         }
     }
-    console.log('[checkWinCondition] Finished check. No win condition met.');
-    return false; // Win condition not met
-}
-
-export function addProofLine(formula, justification, scopeLevel, isAssumptionFlag = false, isShowLineFlag = false) {
-    const { nextLineNumberGlobal, subGoalStack, proofLines } = store.getState();
-    const cleanFormula = formula.trim();
-
-    let formulaForParsing = cleanFormula;
-    if (isShowLineFlag) {
-        formulaForParsing = cleanFormula.replace(/^Show:\s*/i, '');
-    }
-    const formulaAst = LogicParser.textToAst(formulaForParsing);
-
-    if (!isShowLineFlag && !isAssumptionFlag) {
-        const existingLines = proofLines.filter(line => line.scopeLevel === scopeLevel && line.isProven);
-        for (const line of existingLines) {
-            const existingAst = LogicParser.textToAst(line.formula);
-            if (existingAst && formulaAst && LogicParser.areAstsEqual(existingAst, formulaAst)) {
-                EventBus.emit('feedback:show', { message: "This line already exists and is proven in the current scope.", isError: true });
-                return null;
-            }
-        }
-    }
-
-    let displayLineStr, dataLineId;
-    let newNextLineNumber = nextLineNumberGlobal;
-    let newSubGoalStack = [...subGoalStack];
-
-    if (scopeLevel === 0) {
-        displayLineStr = `${newNextLineNumber}.`;
-        dataLineId = `${newNextLineNumber}`;
-        newNextLineNumber++;
-        store.getState().setNextLineNumber(newNextLineNumber);
-    } else {
-        const activeSubProof = newSubGoalStack[newSubGoalStack.length - 1];
-        if (!activeSubProof) {
-            EventBus.emit('feedback:show', { message: "Proof Error: No active subproof!", isError: true });
-            return null;
-        }
-        if (typeof activeSubProof.subLineLetterCode === 'undefined') activeSubProof.subLineLetterCode = 97; // 'a'
-        const subLetter = String.fromCharCode(activeSubProof.subLineLetterCode++);
-        displayLineStr = `${activeSubProof.parentLineDisplay}.${subLetter}`;
-        dataLineId = displayLineStr;
-        store.getState().updateSubGoalStack(newSubGoalStack);
-    }
-
-    const lineData = {
-        lineNumber: dataLineId,
-        formula: cleanFormula,
-        justification,
-        scopeLevel,
-        isAssumption: isAssumptionFlag,
-        isShowLine: isShowLineFlag,
-        isProven: !isShowLineFlag && !isAssumptionFlag,
-        subproofId: isShowLineFlag ? `subproof-${dataLineId.replace('.', '-')}` : null,
-        parentSubproofId: null
-    };
-
-    store.getState().addProofLine(lineData);
-    checkWinCondition();
+    return false;
 }
 
 export function handleSubproofToggle(event) {
@@ -195,7 +220,7 @@ export function handleSubproofToggle(event) {
 
     headerLi.dataset.collapsed = (!isCurrentlyCollapsed).toString();
 
-    const { proofList } = store.getState();
+    const proofList = document.getElementById('proof-lines');
     proofList.querySelectorAll(`li[data-parent-subproof-id="${subproofId}"]`).forEach(line => {
         line.classList.toggle('subproof-content-hidden', !isCurrentlyCollapsed);
     });
@@ -208,18 +233,17 @@ export function setupProofLineDragging(proofList) {
 
 function handleDragStartProofLine(e) {
     e.stopPropagation();
-    if (!e.target || typeof e.target.textContent === 'undefined') { e.preventDefault(); return; }
     const lineItem = e.target.closest('li[data-line-number]');
-    if (!lineItem) { return; }
+    if (!lineItem) return;
 
-    const { lineNumber: lineId, scopeLevel: scopeStr, isProven: isProvenStr } = lineItem.dataset;
+    const { lineNumber: lineId, scopeLevel: scopeStr, isProven: isProvenStr, isAssumption: isAssumptionStr } = lineItem.dataset;
     const scope = parseInt(scopeStr);
     if (!lineId || isNaN(scope)) {
         EventBus.emit('feedback:show', { message: "Drag Error: Missing lineId/scope.", isError: true });
         e.preventDefault();
         return;
     }
-    if (isProvenStr !== 'true' && !isAssumption(lineItem)) {
+    if (isProvenStr !== 'true' && isAssumptionStr !== 'true') {
         EventBus.emit('feedback:show', { message: "Cannot use unproven 'Show' line as premise.", isError: true });
         e.preventDefault();
         return;
@@ -234,5 +258,3 @@ function handleDragStartProofLine(e) {
     });
     formulaDiv.classList.add('dragging');
 }
-
-function isAssumption(lineItem) { return lineItem && lineItem.dataset.isAssumption === 'true'; }

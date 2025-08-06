@@ -98,88 +98,11 @@
         <div id="rules-and-subproofs-column" class="game-section">
             <div id="subproofs-area">
                 <h2>Subproofs</h2>
-                <div class="rule-item" data-rule="CI" data-premises="1" role="button" tabindex="0">
-                    Conditional Introduction (→I)
-                    <div class="rule-slots">
-                        <div class="drop-slot" data-premise-index="0" data-expected-pattern="φ → ψ" role="region" aria-dropeffect="copy">Goal (e.g., φ → ψ)</div>
-                    </div>
-                </div>
-                <div class="rule-item" data-rule="UI" data-premises="1" data-logic-type="fol" role="button" tabindex="0">
-                    Universal Introduction (∀I)
-                    <div class="rule-slots">
-                        <div class="drop-slot" data-premise-index="0" role="region" aria-dropeffect="copy">Goal (e.g., ∀xφx)</div>
-                    </div>
-                </div>
-                <div class="rule-item" data-rule="EE" data-premises="2" data-logic-type="fol" role="button" tabindex="0">
-                    Existential Elimination (∃E)
-                    <div class="rule-slots">
-                        <div class="drop-slot" data-premise-index="0" role="region" aria-dropeffect="copy">Major Premise (e.g., ∃xφx)</div>
-                        <div class="drop-slot" data-premise-index="1" role="region" aria-dropeffect="copy">Subproof Conclusion (e.g., ψ)</div>
-                    </div>
-                </div>
-                <div class="rule-item" data-rule="RAA" data-premises="1" role="button" tabindex="0">
-                    Reductio ad Absurdum (RAA)
-                    <div class="rule-slots">
-                        <div class="drop-slot" data-premise-index="0" role="region" aria-dropeffect="copy">Goal (e.g., φ)</div>
-                    </div>
-                </div>
+                <!-- Subproof rules will be dynamically inserted here -->
             </div>
             <div id="inference-rules-area" class="mt-4">
                 <h2>Inference Rules</h2>
-                <div class="rule-item" data-rule="MP" data-premises="2" role="button" tabindex="0">
-                    Modus Ponens (MP / →E)
-                    <div class="rule-slots">
-                        <div class="drop-slot" data-premise-index="0" data-expected-pattern="φ → ψ" role="region" aria-dropeffect="copy">Premise 1 (e.g., φ → ψ)</div>
-                        <div class="drop-slot" data-premise-index="1" data-expected-pattern="φ" role="region" aria-dropeffect="copy">Premise 2 (e.g., φ)</div>
-                    </div>
-                </div>
-                <div class="rule-item" data-rule="MT" data-premises="2" role="button" tabindex="0">
-                    Modus Tollens (MT)
-                    <div class="rule-slots">
-                        <div class="drop-slot" data-premise-index="0" data-expected-pattern="φ → ψ" role="region" aria-dropeffect="copy">Premise 1 (e.g., φ → ψ)</div>
-                        <div class="drop-slot" data-premise-index="1" data-expected-pattern="~ψ" role="region" aria-dropeffect="copy">Premise 2 (e.g., ~ψ)</div>
-                    </div>
-                </div>
-                <div class="rule-item" data-rule="AndI" data-premises="2" role="button" tabindex="0">
-                    And Introduction (∧I)
-                    <div class="rule-slots">
-                        <div class="drop-slot" data-premise-index="0" role="region" aria-dropeffect="copy">Premise 1 (e.g., φ)</div>
-                        <div class="drop-slot" data-premise-index="1" role="region" aria-dropeffect="copy">Premise 2 (e.g., ψ)</div>
-                    </div>
-                </div>
-                <div class="rule-item" data-rule="AndE" data-premises="1" role="button" tabindex="0">
-                    And Elimination (∧E)
-                    <div class="rule-slots">
-                        <div class="drop-slot" data-premise-index="0" data-expected-pattern="φ ∧ ψ" role="region" aria-dropeffect="copy">Premise (e.g., φ ∧ ψ)</div>
-                    </div>
-                </div>
-                <div class="rule-item" data-rule="Add" data-premises="2" role="button" tabindex="0">
-                    Addition (∨I)
-                    <div class="rule-slots">
-                        <div class="drop-slot" data-premise-index="0" role="region" aria-dropeffect="copy">Existing Line (e.g., φ)</div>
-                        <div class="drop-slot" data-premise-index="1" role="region" aria-dropeffect="copy">WFF to Add (e.g., ψ)</div>
-                    </div>
-                </div>
-                <!-- **NEW:** Updated UI for Existential Introduction -->
-                <div class="rule-item" data-rule="EI" data-premises="2" data-logic-type="fol" role="button" tabindex="0">
-                    Existential Introduction (∃I)
-                    <div class="rule-slots">
-                        <div class="drop-slot" data-premise-index="0" role="region" aria-dropeffect="copy">Formula (e.g., F(a))</div>
-                        <div class="drop-slot" data-premise-index="1" role="region" aria-dropeffect="copy">Variable to Generalize (e.g., x)</div>
-                    </div>
-                </div>
-                <div class="rule-item" data-rule="DN" data-premises="1" role="button" tabindex="0">
-                    Double Negation (DN)
-                    <div class="rule-slots">
-                        <div class="drop-slot" data-premise-index="0" data-expected-pattern="~~φ or φ" role="region" aria-dropeffect="copy">Premise (e.g., ~~φ or φ)</div>
-                    </div>
-                </div>
-                <div class="rule-item" data-rule="Reiteration" data-premises="1" role="button" tabindex="0">
-                    Reiteration (Re)
-                    <div class="rule-slots">
-                        <div class="drop-slot" data-premise-index="0" role="region" aria-dropeffect="copy">Line to Reiterate</div>
-                    </div>
-                </div>
+                <!-- Inference rules will be dynamically inserted here -->
             </div>
         </div>
     </div>

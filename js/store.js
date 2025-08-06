@@ -17,6 +17,7 @@ const initialState = {
     feedbackHistory: [],
     currentFeedbackIndex: -1,
     wffTrayFontSize: 2.4,
+    wffTray: [],
 };
 
 export const store = create((set) => ({
@@ -27,6 +28,7 @@ export const store = create((set) => ({
         currentProblem: problem.problem,
         premises: problem.premises,
         goalFormula: problem.goalFormula,
+        wffTray: [], // Reset WFF tray on new problem
     }),
 
     addProofLine: (line) => set(state => ({
@@ -52,6 +54,7 @@ export const store = create((set) => ({
         subGoalStack: [],
         currentScopeLevel: 0,
         nextLineNumberGlobal: state.premises.length + 1,
+        wffTray: [], // Reset WFF tray on proof reset
     })),
 
     setFirstOperandWFF: (wff) => set({ firstOperandWFF: wff }),
@@ -73,4 +76,13 @@ export const store = create((set) => ({
     })),
 
     clearFeedback: () => set({ feedbackHistory: [], currentFeedbackIndex: -1 }),
+
+    // WFF Tray Actions
+    addWff: (wff) => set(state => ({
+        wffTray: [...state.wffTray, wff]
+    })),
+
+    removeWff: (elementId) => set(state => ({
+        wffTray: state.wffTray.filter(wff => wff.elementId !== elementId)
+    })),
 }));

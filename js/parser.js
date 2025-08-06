@@ -164,28 +164,31 @@ export const LogicParser = (() => {
     return {
         textToAst: (text) => {
             if (typeof text !== 'string') {
-                console.error("Parser Error: Input is not a string.", text);
-        EventBus.emit('feedback:show', { message: `Parser Error: Input is not a string: ${text}`, isError: true });
-                return null;
+                throw new Error(`Parser Error: Input is not a string, but ${typeof text}.`);
             }
             try {
                 tokens = tokenize(text);
                 pos = 0;
-                return parseExpression(0);
+                const ast = parseExpression(0);
+                if (pos < tokens.length) {
+                    // This ensures the entire string was consumed.
+                    throw new Error(`Unexpected token at end of expression: ${peek()}`);
+                }
+                return ast;
             }
             catch (e) {
-                console.error("Parsing Error:", e.message, "for formula:", text);
-        EventBus.emit('feedback:show', { message: `Parsing Error: ${e.message} for formula: ${text}`, isError: true });
-                return null;
+                // Re-throw a more informative error.
+                throw new Error(`Parsing Error: ${e.message} in formula: "${text}"`);
             }
         },
         astToText: (ast) => {
-             try { return fromAst(ast); }
-             catch (e) { 
-            console.error("AST-to-Text Error:", e.message, "for ast:", ast); 
-            EventBus.emit('feedback:show', { message: `AST-to-Text Error: ${e.message}`, isError: true });
-            return ''; 
-        }
+             try {
+                return fromAst(ast);
+             }
+             catch (e) {
+                // Re-throw a more informative error.
+                throw new Error(`AST-to-Text Error: ${e.message}`);
+             }
         },
         areAstsEqual: areEqual,
         tokenize: tokenize // Expose tokenize for rendering
