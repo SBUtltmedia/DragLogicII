@@ -11,8 +11,7 @@ const initialState = {
     nextLineNumberGlobal: 1,
 
     // UI state that is data
-    firstOperandWFF: null,
-    waitingConnectiveWFF: null,
+    wffConstruction: { firstOperand: null, connective: null }, // New state for building WFFs
     draggedElementForRemoval: null,
     feedbackHistory: [],
     currentFeedbackIndex: -1,
@@ -55,10 +54,10 @@ export const store = create((set) => ({
         currentScopeLevel: 0,
         nextLineNumberGlobal: state.premises.length + 1,
         wffTray: [], // Reset WFF tray on proof reset
+        wffConstruction: { firstOperand: null, connective: null }, // Reset WFF construction
     })),
 
-    setFirstOperandWFF: (wff) => set({ firstOperandWFF: wff }),
-    setWaitingConnectiveWFF: (wff) => set({ waitingConnectiveWFF: wff }),
+    setWffConstruction: (construction) => set({ wffConstruction: construction }),
 
     setProofLines: (lines) => set({ proofLines: lines }),
 
@@ -78,11 +77,13 @@ export const store = create((set) => ({
     clearFeedback: () => set({ feedbackHistory: [], currentFeedbackIndex: -1 }),
 
     // WFF Tray Actions
-    addWff: (wff) => set(state => ({
-        wffTray: [...state.wffTray, wff]
-    })),
+    addWff: (wff) => set(state => {
+        console.log('[store.addWff] Adding WFF:', wff);
+        return { wffTray: [...state.wffTray, wff] };
+    }),
 
-    removeWff: (elementId) => set(state => ({
-        wffTray: state.wffTray.filter(wff => wff.elementId !== elementId)
-    })),
+    removeWff: (elementId) => set(state => {
+        console.log('[store.removeWff] Removing WFF with elementId:', elementId);
+        return { wffTray: state.wffTray.filter(wff => wff.elementId !== elementId) };
+    }),
 }));

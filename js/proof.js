@@ -119,12 +119,11 @@ export function startRAA(goalAst) {
 }
 
 export function startConditionalIntroduction(conditionalAst) {
-    const { currentScopeLevel } = store.getState();
     const conditionalFormula = LogicParser.astToText(conditionalAst);
     const antecedentFormula = LogicParser.astToText(conditionalAst.left);
     const consequentFormula = LogicParser.astToText(conditionalAst.right);
 
-    // 1. Add the "Show" line
+    const { currentScopeLevel } = store.getState();
     const showLineData = addProofLine(`Show: ${conditionalFormula}`, "Goal (→I)", currentScopeLevel, false, true);
     if (!showLineData) return;
 
@@ -155,6 +154,44 @@ export function startConditionalIntroduction(conditionalAst) {
     }
 
     EventBus.emit('feedback:show', { message: `Subproof (→I): Assume ${antecedentFormula}. Derive ${consequentFormula}.`, isError: false });
+    EventBus.emit('subgoal:update');
+}
+
+export function startExistentialInstantiation(existentialFormula, assumptionFormula, newVar) {
+    const { currentScopeLevel } = store.getState();
+
+    // 1. Add the "Show" line for the existential formula
+    const showLineData = addProofLine(`Show: ${existentialFormula}`, "Goal (EI)", currentScopeLevel, false, true);
+    if (!showLineData) return;
+
+    // 2. Update state for the new subproof
+    const newScopeLevel = currentScopeLevel + 1;
+    store.getState().setCurrentScopeLevel(newScopeLevel);
+
+    const newSubGoal = {
+        goal: null, // In EI, the goal is to re-derive the same formula
+        forWff: existentialFormula,
+        type: "EI",
+        assumptionFormula: assumptionFormula,
+        showLineFullId: showLineData.lineNumber,
+        parentLineDisplay: showLineData.lineNumber,
+        subLineLetterCode: 97, // 'a'
+        scope: newScopeLevel,
+        assumptionLineFullId: "",
+        subproofId: showLineData.subproofId,
+        newInstanceVar: newVar
+    };
+    store.getState().updateSubGoalStack([...store.getState().subGoalStack, newSubGoal]);
+
+    // 3. Add the assumption line
+    const assumptionLineData = addProofLine(assumptionFormula, `Assumption (EI, ${newVar})`, newScopeLevel, true);
+    if (assumptionLineData) {
+        const updatedStack = store.getState().subGoalStack;
+        updatedStack[updatedStack.length - 1].assumptionLineFullId = assumptionLineData.lineNumber;
+        store.getState().updateSubGoalStack(updatedStack);
+    }
+
+    EventBus.emit('feedback:show', { message: `Subproof (EI): Assume ${assumptionFormula}. Derive the original formula.`, isError: false });
     EventBus.emit('subgoal:update');
 }
 

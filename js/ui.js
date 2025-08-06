@@ -215,6 +215,7 @@ function renderFormulaWithDraggableVars(formulaString) {
 }
 
 function renderWffTray(wffTray) {
+    console.log('[renderWffTray] Rendering WFF tray with formulas:', wffTray);
     wffOutputTray.innerHTML = '';
     wffTray?.forEach(wffData => {
         const item = document.createElement('div');
@@ -314,9 +315,11 @@ export function addEventListeners() {
         wffOutputTray.style.setProperty('--wff-font-size-rem', `${newSize}rem`);
     });
     
+    EventBus.on('wff:add', (wffData) => {
+        store.getState().addWff(wffData);
+    });
     EventBus.on('wff:remove', (wffData) => {
-        const el = wffOutputTray.querySelector(`[id="${wffData.elementId}"]`);
-        if (el) el.remove();
+        store.getState().removeWff(wffData.elementId);
     });
     EventBus.on('proof:update', render);
     EventBus.on('subgoal:update', updateSubGoalDisplay);
@@ -351,12 +354,20 @@ export function addEventListeners() {
                 spot.textContent = spot.dataset.originalText || spot.dataset.connective;
             }
         });
+        store.getState().setWffConstruction({ firstOperand: null, connective: null });
     });
-    EventBus.on('wff:add', (wffData) => {
-        store.getState().addWff(wffData);
+    EventBus.on('rules:fillSlot', ({ slot, data }) => {
+        slot.textContent = data.lineId ? `${data.lineId}: ${data.formula}` : data.formula;
+        slot.classList.remove('text-slate-400', 'italic');
     });
-    EventBus.on('wff:remove', (wffData) => {
-        store.getState().removeWff(wffData.elementId);
+
+    EventBus.on('rules:clearSlot', (slot) => {
+        slot.textContent = slot.dataset.placeholder || "Drop here...";
+        slot.classList.add('text-slate-400', 'italic');
+        delete slot.dataset.formula;
+        delete slot.dataset.line;
+        delete slot.dataset.source;
+        delete slot.dataset.elementId;
     });
     EventBus.on('rules:activate', (ruleElement) => {
         document.querySelectorAll('.rule-item').forEach(item => item.classList.remove('active'));

@@ -59,6 +59,192 @@ export const ruleSet = {
             return false;
         }
     },
+    'MTP': {
+        name: 'Modus Tollendo Ponens (MTP)',
+        premises: 2,
+        logicType: 'prop',
+        slots: [
+            { placeholder: 'Premise 1 (e.g., φ ∨ ψ)', expectedPattern: 'φ ∨ ψ', accepts: ['proof-line-formula'] },
+            { placeholder: 'Premise 2 (e.g., ~φ)', expectedPattern: '~φ', accepts: ['proof-line-formula'] }
+        ],
+        apply: (slotsData) => {
+            const [premise1, premise2] = slotsData;
+            const ast1 = LogicParser.textToAst(premise1.formula);
+            const ast2 = LogicParser.textToAst(premise2.formula);
+
+            if (ast1 && ast1.type === 'binary' && ast1.operator === '∨' && ast2 && ast2.type === 'negation') {
+                if (LogicParser.areAstsEqual(ast1.left, ast2.operand)) {
+                    return {
+                        resultFormula: LogicParser.astToText(ast1.right),
+                        justificationText: `MTP ${premise1.line}, ${premise2.line}`,
+                    };
+                } else if (LogicParser.areAstsEqual(ast1.right, ast2.operand)) {
+                    return {
+                        resultFormula: LogicParser.astToText(ast1.left),
+                        justificationText: `MTP ${premise1.line}, ${premise2.line}`,
+                    };
+                }
+            }
+            EventBus.emit('feedback:show', { message: "MTP Error: The premises must be of the form (φ ∨ ψ) and ~φ (or ~ψ).", isError: true });
+            return null;
+        }
+    },
+    'BC': {
+        name: 'Biconditional-Conditional (BC)',
+        premises: 1,
+        logicType: 'prop',
+        slots: [
+            { placeholder: 'Premise (e.g., φ ↔ ψ)', expectedPattern: 'φ ↔ ψ', accepts: ['proof-line-formula'] }
+        ],
+        apply: (slotsData) => {
+            const [premise] = slotsData;
+            const ast = LogicParser.textToAst(premise.formula);
+
+            if (ast && ast.type === 'binary' && ast.operator === '↔') {
+                const resultAst = { type: 'binary', operator: '→', left: ast.left, right: ast.right };
+                return {
+                    resultFormula: LogicParser.astToText(resultAst),
+                    justificationText: `BC ${premise.line}`,
+                };
+            }
+            EventBus.emit('feedback:show', { message: "BC Error: The premise must be a biconditional (φ ↔ ψ).", isError: true });
+            return null;
+        }
+    },
+    'CB': {
+        name: 'Conditional-Biconditional (CB)',
+        premises: 2,
+        logicType: 'prop',
+        slots: [
+            { placeholder: 'Premise 1 (e.g., φ → ψ)', expectedPattern: 'φ → ψ', accepts: ['proof-line-formula'] },
+            { placeholder: 'Premise 2 (e.g., ψ → φ)', expectedPattern: 'φ → ψ', accepts: ['proof-line-formula'] }
+        ],
+        apply: (slotsData) => {
+            const [premise1, premise2] = slotsData;
+            const ast1 = LogicParser.textToAst(premise1.formula);
+            const ast2 = LogicParser.textToAst(premise2.formula);
+
+            if (ast1 && ast1.type === 'binary' && ast1.operator === '→' &&
+                ast2 && ast2.type === 'binary' && ast2.operator === '→' &&
+                LogicParser.areAstsEqual(ast1.left, ast2.right) &&
+                LogicParser.areAstsEqual(ast1.right, ast2.left)) {
+                const resultAst = { type: 'binary', operator: '↔', left: ast1.left, right: ast1.right };
+                return {
+                    resultFormula: LogicParser.astToText(resultAst),
+                    justificationText: `CB ${premise1.line}, ${premise2.line}`,
+                };
+            }
+            EventBus.emit('feedback:show', { message: "CB Error: The premises must be of the form (φ → ψ) and (ψ → φ).", isError: true });
+            return null;
+        }
+    },
+    'UI': {
+        name: 'Universal Instantiation (UI)',
+        premises: 1,
+        logicType: 'fol',
+        slots: [
+            { placeholder: 'Premise (e.g., ∀xφx)', expectedPattern: '∀xφx', accepts: ['proof-line-formula'] }
+        ],
+        apply: (slotsData) => {
+            const [premise] = slotsData;
+            const ast = LogicParser.textToAst(premise.formula);
+
+            if (ast && ast.type === 'quantifier' && ast.quantifier === '∀') {
+                const term = prompt(`Instantiate "${ast.variable}" to what term?`);
+                if (!term) {
+                    EventBus.emit('feedback:show', { message: "UI Error: You must provide a term to instantiate.", isError: true });
+                    return null;
+                }
+
+                function replaceInAst(ast, fromVar, toTerm) {
+                    if (!ast) return null;
+                    if (ast.type === 'variable' && ast.value === fromVar) {
+                        return toTerm;
+                    }
+                    if (ast.type === 'predicate') {
+                        const newArgs = ast.args.map(arg => replaceInAst(arg, fromVar, toTerm));
+                        return { ...ast, args: newArgs };
+                    }
+                    if (ast.type === 'negation') {
+                         return { ...ast, operand: replaceInAst(ast.operand, fromVar, toTerm) };
+                    }
+                    if (ast.type === 'binary') {
+                        return { ...ast, left: replaceInAst(ast.left, fromVar, toTerm), right: replaceInAst(ast.right, fromVar, toTerm) };
+                    }
+                     if (ast.type === 'quantifier') {
+                         if (ast.variable === fromVar) return ast; // Variable is bound, do not replace.
+                         return { ...ast, formula: replaceInAst(ast.formula, fromVar, toTerm) };
+                    }
+                    return ast;
+                }
+
+                const termAst = LogicParser.textToAst(term);
+                if (!termAst) {
+                    EventBus.emit('feedback:show', { message: `UI Error: Invalid term "${term}".`, isError: true });
+                    return null;
+                }
+
+                const resultAst = replaceInAst(ast.formula, ast.variable, termAst);
+                return {
+                    resultFormula: LogicParser.astToText(resultAst),
+                    justificationText: `UI ${premise.line}`,
+                };
+            }
+            EventBus.emit('feedback:show', { message: "UI Error: The premise must be a universally quantified formula (∀xφx).", isError: true });
+            return null;
+        }
+    },
+    'EI': {
+        name: 'Existential Instantiation (EI)',
+        premises: 1,
+        logicType: 'fol',
+        isSubproof: true,
+        slots: [
+            { placeholder: 'Premise (e.g., ∃xφx)', expectedPattern: '∃xφx', accepts: ['proof-line-formula'] }
+        ],
+        apply: (slotsData) => {
+            const [premise] = slotsData;
+            const ast = LogicParser.textToAst(premise.formula);
+
+            if (ast && ast.type === 'quantifier' && ast.quantifier === '∃') {
+                const newVar = prompt(`Instantiate "${ast.variable}" with what new variable?`);
+                if (!newVar || !/^[a-w]/.test(newVar)) {
+                    EventBus.emit('feedback:show', { message: "EI Error: You must provide a new variable (a-w).", isError: true });
+                    return null;
+                }
+
+                function replaceInAst(ast, fromVar, toVar) {
+                    if (!ast) return null;
+                    if (ast.type === 'variable' && ast.value === fromVar) {
+                        return { type: 'variable', value: toVar };
+                    }
+                    if (ast.type === 'predicate') {
+                        const newArgs = ast.args.map(arg => replaceInAst(arg, fromVar, toVar));
+                        return { ...ast, args: newArgs };
+                    }
+                    if (ast.type === 'negation') {
+                         return { ...ast, operand: replaceInAst(ast.operand, fromVar, toVar) };
+                    }
+                    if (ast.type === 'binary') {
+                        return { ...ast, left: replaceInAst(ast.left, fromVar, toVar), right: replaceInAst(ast.right, fromVar, toVar) };
+                    }
+                     if (ast.type === 'quantifier') {
+                         if (ast.variable === fromVar) return ast; // Variable is bound, do not replace.
+                         return { ...ast, formula: replaceInAst(ast.formula, fromVar, toVar) };
+                    }
+                    return ast;
+                }
+
+                const assumptionAst = replaceInAst(ast.formula, ast.variable, newVar);
+                const assumptionFormula = LogicParser.astToText(assumptionAst);
+
+                startExistentialInstantiation(premise.formula, assumptionFormula, newVar);
+                return true;
+            }
+            EventBus.emit('feedback:show', { message: "EI Error: The premise must be an existentially quantified formula (∃xφx).", isError: true });
+            return false;
+        }
+    },
 
     // --- Standard Inference Rules ---
     'MP': {

@@ -8,8 +8,7 @@ const DRAG_DATA_TYPE = 'application/x-nd-drag-data';
 
 // --- Helper Functions ---
 function clearWffInProgress() {
-    store.getState().setFirstOperandWFF(null);
-    store.getState().setWaitingConnectiveWFF(null);
+    store.getState().setWffConstruction({ firstOperand: null, connective: null });
     EventBus.emit('ui:resetHotspots');
 }
 
@@ -94,28 +93,27 @@ export function handleGenericDragEnd(e) {
 }
 
 function handleQuantifierDrop(connective, droppedFormula, droppedSourceType, targetHotspot) {
-    const { firstOperandWFF, waitingConnectiveWFF } = store.getState();
+    const { wffConstruction } = store.getState();
     const isQuantifier = connective === '∀' || connective === '∃';
     const operatorType = isQuantifier ? 'quantifier' : 'description';
     const operatorName = isQuantifier ? 'Quantifiers' : 'Iota';
 
-    if (!firstOperandWFF) { // Waiting for a variable
+    if (!wffConstruction.firstOperand) { // Waiting for a variable
         if (droppedSourceType !== 'fol-variable') {
             EventBus.emit('feedback:show', { message: `${operatorName} require a variable first (x, y, or z).`, isError: true });
             return;
         }
-        store.getState().setFirstOperandWFF(droppedFormula);
-        store.getState().setWaitingConnectiveWFF(connective);
+        store.getState().setWffConstruction({ firstOperand: droppedFormula, connective: connective });
         targetHotspot.classList.add('waiting');
         targetHotspot.textContent = `${connective}${droppedFormula}(?)`;
     } else { // Already have variable, waiting for formula
-        if (waitingConnectiveWFF === connective) {
+        if (wffConstruction.connective === connective) {
             const ast = LogicParser.textToAst(droppedFormula);
             if (!ast) { 
                 EventBus.emit('feedback:show', { message: `Invalid formula dropped on ${operatorName.toLowerCase()}.`, isError: true });
                 return; 
             }
-            const resultAst = { type: operatorType, operator: connective, variable: firstOperandWFF, formula: ast };
+            const resultAst = { type: operatorType, operator: connective, variable: wffConstruction.firstOperand, formula: ast };
             if(isQuantifier) resultAst.quantifier = connective;
             EventBus.emit('wff:add', { formula: LogicParser.astToText(resultAst), elementId: `wff-tray-${Date.now()}` });
             clearWffInProgress();
@@ -132,6 +130,8 @@ export function handleDropOnConnectiveHotspot(e) {
     if (!targetHotspot) return;
     targetHotspot.classList.remove('drag-over');
     const data = getDragData(e);
+    console.log('[handleDropOnConnectiveHotspot] Drop data:', data);
+
     if (!data || !data.formula) { 
         EventBus.emit('feedback:show', { message: "Drop on Connective: No valid drag data found.", isError: true });
         return; 
@@ -145,31 +145,53 @@ export function handleDropOnConnectiveHotspot(e) {
         return;
     }
 
-    const { firstOperandWFF, waitingConnectiveWFF } = store.getState();
+    const { wffConstruction } = store.getState();
+    console.log('[handleDropOnConnectiveHotspot] Current wffConstruction state:', wffConstruction);
     const droppedAst = LogicParser.textToAst(droppedFormula);
     if (!droppedAst) { EventBus.emit('feedback:show', { message: "Invalid formula dropped.", isError: true }); return; }
 
     if (connective === '~') {
+        console.log('[handleDropOnConnectiveHotspot] Handling negation.');
         const newAst = { type: 'negation', operand: droppedAst };
         EventBus.emit('wff:add', { formula: LogicParser.astToText(newAst), elementId: `wff-tray-${Date.now()}` });
+        if (droppedSourceType === 'wff-tray-formula') {
+            EventBus.emit('wff:remove', { elementId: droppedElementId });
+        }
         clearWffInProgress();
     } else {
-        if (!firstOperandWFF) {
-            store.getState().setFirstOperandWFF(droppedFormula);
-            store.getState().setWaitingConnectiveWFF(connective);
+        if (!wffConstruction.firstOperand) {
+            console.log('[handleDropOnConnectiveHotspot] First operand dropped. Setting wffConstruction state.');
+            store.getState().setWffConstruction({ 
+                firstOperand: { formula: droppedFormula, elementId: droppedElementId, sourceType: droppedSourceType }, 
+                connective: connective 
+            });
             targetHotspot.classList.add('waiting');
-            targetHotspot.textContent = `${LogicParser.astToText(droppedAst)} ${connective} ?`;
+            targetHotspot.textContent = `${droppedFormula} ${connective} ?`;
         } else {
-            if (waitingConnectiveWFF === connective) {
-                const firstAst = LogicParser.textToAst(firstOperandWFF);
+            console.log('[handleDropOnConnectiveHotspot] Second operand dropped.');
+            if (wffConstruction.connective === connective) {
+                const firstAst = LogicParser.textToAst(wffConstruction.firstOperand.formula);
                 if (!firstAst) { EventBus.emit('feedback:show', { message: "Invalid first formula.", isError: true }); clearWffInProgress(); return; }
                 const newAst = { type: 'binary', operator: connective, left: firstAst, right: droppedAst };
-                EventBus.emit('wff:add', { formula: LogicParser.astToText(newAst), elementId: `wff-tray-${Date.now()}` });
+                const newFormula = LogicParser.astToText(newAst);
+                console.log('[handleDropOnConnectiveHotspot] Creating new formula:', newFormula);
+                EventBus.emit('wff:add', { formula: newFormula, elementId: `wff-tray-${Date.now()}` });
+
+                if (wffConstruction.firstOperand.sourceType === 'wff-tray-formula') {
+                    console.log('[handleDropOnConnectiveHotspot] Removing first operand from tray:', wffConstruction.firstOperand.elementId);
+                    EventBus.emit('wff:remove', { elementId: wffConstruction.firstOperand.elementId });
+                }
+                if (droppedSourceType === 'wff-tray-formula') {
+                    console.log('[handleDropOnConnectiveHotspot] Removing second operand from tray:', droppedElementId);
+                    EventBus.emit('wff:remove', { elementId: droppedElementId });
+                }
                 clearWffInProgress();
-            } else { EventBus.emit('feedback:show', { message: "WFF Error: Connective mismatch.", isError: true }); clearWffInProgress(); }
+            } else { 
+                EventBus.emit('feedback:show', { message: "WFF Error: Connective mismatch.", isError: true }); 
+                clearWffInProgress(); 
+            }
         }
     }
-    if (droppedSourceType === 'wff-tray-formula' && droppedElementId) EventBus.emit('wff:remove', { elementId: droppedElementId });
 }
 
 export function handleDropOnWffOutputTray(e) {
