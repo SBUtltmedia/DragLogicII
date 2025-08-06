@@ -1,237 +1,260 @@
-/* Custom Styles */
-:root {
-    --game-width-ref: 1200;
-}
-html {
-    font-size: 16px; /* Base font size, will be scaled by JS */
-    height: 100%;
-    overflow: hidden; /* Prevent scrollbars on html/body */
-}
+/*
+================================================================================
+NEW LAYOUT ENGINE STYLES
+================================================================================
+*/
+
+/* Basic setup for the aspect-ratio layout */
 body {
-    background-color: #334155; /* Slate-700 */
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    color: #e2e8f0; /* Slate-200 */
     margin: 0;
-    padding: 0; /* Remove default body padding */
+    overflow: hidden;
+    background-color: #111; /* Color for letter/pillarboxing */
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    color: #e2e8f0; /* Slate-200 */
+    -webkit-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+
+#main-container {
+    position: absolute;
+    background-color: #475569; /* Slate-600 */
+    overflow: hidden;
+    box-shadow: 0 0 3rem rgba(0,0,0,0.6);
+    box-sizing: border-box;
+}
+
+/* All direct children of the container are positioned absolutely with `rem` units */
+#game-title {
+    position: absolute;
+    top: 1rem;
+    left: 2rem;
+    right: 2rem;
+    height: 5rem;
+    font-size: 2.5rem;
+    text-shadow: 0.05em 0.05em 0.1em #000;
+    color: #93c5fd; /* sky-300 */
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 100%;
-    overflow: hidden; /* Prevent scrollbars on html/body */
-    /* **FIX**: Disable text selection */
-    -webkit-user-select: none; /* Safari */
-    -ms-user-select: none; /* IE 10+ and Edge */
-    user-select: none; /* Standard syntax */
-}
-
-#game-wrapper {
-    position: relative;
-    overflow: hidden; /* Crucial for containing scaled content */
-    margin: auto; /* Center the wrapper if it's smaller than viewport */
-    background-color: #475569; /* Slate-600 */
-    box-shadow: 0 0 1.5rem rgba(0,0,0,0.6);
-    display: flex;
-    flex-direction: column;
-    box-sizing: border-box; /* Include padding and border in the element's total width and height */
-    transition: transform 0.3s ease-in-out; /* For smooth zoom */
+    text-align: center;
 }
 
 #help-icon {
     position: absolute;
-    top: 10px;
-    right: 10px;
-    width: 30px;
-    height: 30px;
+    top: 1.5rem;
+    right: 1.5rem;
+    width: 3rem;
+    height: 3rem;
     background-color: #0ea5e9;
     color: white;
     border-radius: 50%;
     text-align: center;
-    line-height: 30px;
+    line-height: 3rem;
     cursor: pointer;
-    font-size: 20px;
+    font-size: 2rem;
     font-weight: bold;
     z-index: 1000;
 }
 
-/* Class to apply zoom */
-#game-wrapper.zoomed {
-    transform: scale(1.5);
-}
-
-/* Adjust font sizes using rem, which will scale with html font-size */
-h1 { font-size: 2rem; text-shadow: 0.05rem 0.05rem 0.1rem #000; }
-h2 { font-size: 1.2rem; margin-bottom: 0.5rem; color: #cbd5e1; /* Slate-300 */}
-h3 { font-size: 1rem; margin-bottom: 0.3rem; color: #94a3b8; /* Slate-400 */}
-p, button, span, div, li { font-size: 0.8rem; }
-button { padding: 0.4rem 0.8rem; }
-
-.main-content-grid {
-    display: grid;
-    grid-template-columns: 1fr 2fr 1fr; /* WFF | Proof | Rules */
-    gap: 1rem;
-    width: 100%;
-    flex-grow: 1; /* Allow grid to take available vertical space */
-    padding: 1rem;
-    overflow: hidden; /* Prevent internal scrollbars unless necessary in .game-section */
-    box-sizing: border-box;
-}
-
 .game-section {
+    position: absolute;
     background-color: #1e293b; /* Slate-800 */
     border: 1px solid #334155; /* Slate-700 */
-    border-radius: 0.5rem;
-    padding: 0.8rem;
-    overflow-y: auto; /* Allow scrolling within sections if content overflows */
+    border-radius: 0.8rem; /* Use rem for scaling border */
+    padding: 1.5rem;
+    box-sizing: border-box;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
+    /* Enable container queries for scalable text */
+    container-type: inline-size;
+    --base-font-size: 2cqw;
 }
+
+/* Define the layout of the three main columns */
+#wff-construction-area {
+    top: 7rem;
+    left: 2rem;
+    width: 28rem;
+    bottom: 2rem;
+}
+
+#proof-area {
+    top: 7rem;
+    left: 32rem;
+    width: 40rem;
+    bottom: 2rem;
+}
+
+#rules-and-subproofs-column {
+    top: 7rem;
+    right: 2rem;
+    width: 24rem;
+    bottom: 2rem;
+}
+
+
+/*
+================================================================================
+EXISTING COMPONENT STYLES (ADAPTED FOR NEW ENGINE)
+================================================================================
+*/
+
+/* General typography inside game sections. Use `cqw` for scalable text. */
 .game-section h2 {
+    font-size: calc(var(--base-font-size) * 2.5);
+    margin-bottom: 0.5em; /* em scales with the h2's font size */
+    color: #cbd5e1; /* Slate-300 */
     border-bottom: 1px solid #475569; /* Slate-600 */
-    padding-bottom: 0.3rem;
+    padding-bottom: 0.3em;
     margin-top: 0;
 }
 
+.game-section h3 {
+    font-size: calc(var(--base-font-size) * 2);
+    margin-bottom: 0.4em;
+    color: #94a3b8; /* Slate-400 */
+}
+
+p, button, span, div, li {
+    font-size: calc(var(--base-font-size) * 1.8); /* Base text size inside sections */
+}
+button {
+    padding: 0.5em 1em; /* em for padding relative to button text */
+}
+
+
 /* Proof Area Specifics */
-#proof-area ol { list-style-type: none; padding-left: 0; flex-grow: 1; overflow-y: auto; margin: 0; border: 2px dashed transparent; /* For drop target indication */ }
+#proof-area ol { list-style-type: none; padding-left: 0; flex-grow: 1; overflow-y: auto; margin: 0; border: 2px dashed transparent; }
 #proof-area ol.drag-over-proof { border-color: #60a5fa; background-color: rgba(96, 165, 250, 0.1); }
 
 #proof-area li {
-    background-color: #334155; /* Slate-700 */
-    margin-bottom: 0.3rem;
-    padding: 0.4rem 0.6rem;
-    border-radius: 0.25rem;
+    background-color: #334155;
+    margin-bottom: 0.3em;
+    padding: 0.4em 0.6em;
+    border-radius: 0.25em;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border: 1px solid #475569; /* Slate-600 */
+    border: 1px solid #475569;
     transition: background-color 0.3s ease;
-    position: relative; /* For subproof lines */
+    position: relative;
+    font-size: calc(var(--base-font-size) * 1.9); /* Make proof lines scale */
 }
-/* Subproof Indentation and Lines */
-.subproof-line { /* Common style for all subproof lines including assumption */
-    /* margin-left will be set by JS */
-    border-left: 2px solid #60a5fa; /* Vertical line for scope */
-    padding-left: 0.8rem !important; /* Adjust padding after line, ensure it overrides */
+.subproof-line {
+    border-left: 2px solid #60a5fa;
+    padding-left: 0.8em !important;
 }
- .subproof-assumption {
-    background-color: #4b5563 !important; /* Slightly different background for assumption */
+.subproof-assumption {
+    background-color: #4b5563 !important;
 }
-.show-line { /* Style for the "Show: φ" line */
-    background-color: #0f172a; /* Darker, like goal */
+.show-line {
+    background-color: #0f172a;
     border-style: dashed;
-    border-color: #f59e0b; /* Amber */
+    border-color: #f59e0b;
 }
-.show-line .formula {
-    color: #f59e0b; /* Amber text for the formula being shown */
-}
-.show-line.proven-show-line { /* Style for when a "Show" line is proven */
-    background-color: #334155; /* Back to normal line color */
+.show-line .formula { color: #f59e0b; }
+.show-line.proven-show-line {
+    background-color: #334155;
     border-style: solid;
-    border-color: #22c55e; /* Green border to indicate success */
+    border-color: #22c55e;
 }
-.show-line.proven-show-line .formula {
-    color: #f1f5f9; /* Back to normal formula color */
-}
-/* Collapsible subproof styles */
-.subproof-header-collapsible .formula {
-    cursor: pointer;
-}
-.subproof-header-collapsible .line-number::after { /* Basic expand/collapse indicator */
-    content: ' [+]'; /* Default to collapsed */
+.show-line.proven-show-line .formula { color: #f1f5f9; }
+.subproof-header-collapsible .formula { cursor: pointer; }
+.subproof-header-collapsible .line-number::after {
+    content: ' [+]';
     font-size: 0.7em;
     color: #94a3b8;
-    font-family: monospace; /* Use fixed-width font for indicator */
+    font-family: monospace;
 }
 .subproof-header-collapsible[data-collapsed="false"] .line-number::after {
     content: ' [-]';
-    font-family: monospace; /* Ensure consistency */
+    font-family: monospace;
 }
-.subproof-content-hidden {
-    display: none !important;
-}
-
+.subproof-content-hidden { display: none !important; }
 
 #proof-area li.proof-line-complete { background-color: #166534; border-color: #22c55e; }
 #proof-area li.proof-line-complete .formula,
 #proof-area li.proof-line-complete .line-number,
 #proof-area li.proof-line-complete .justification { color: #f0fdf4; }
-.line-number { color: #94a3b8; margin-right: 0.5rem; font-weight: bold; }
-.formula { font-family: monospace; color: #f1f5f9; cursor: grab; padding: 0.2rem 0.4rem; background-color: #2d3748; border: 1px solid #4a5568; border-radius: 0.15rem; display: inline-flex; align-items: center; gap: 0.15rem; margin-right: auto; transition: transform 0.2s ease-in-out; }
+
+.line-number { color: #94a3b8; margin-right: 0.5em; font-weight: bold; }
+.formula {
+    font-family: monospace;
+    color: #f1f5f9;
+    cursor: grab;
+    padding: 0.2em 0.4em;
+    background-color: #2d3748;
+    border: 1px solid #4a5568;
+    border-radius: 0.15em;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.15em;
+    margin-right: auto;
+    transition: transform 0.2s ease-in-out;
+}
 .formula.dragging { opacity: 0.5; cursor: grabbing; box-shadow: 0 0 5px #60a5fa; }
-.justification { font-size: 0.7rem; color: #64748b; white-space: nowrap; flex-shrink: 0; }
-.proof-header, .proof-goal, .subproof-goal-display { padding: 0.5rem; margin-bottom: 0.5rem; background-color: #0f172a; border-radius: 0.25rem; }
+.justification { font-size: 0.8em; color: #64748b; white-space: nowrap; flex-shrink: 0; }
+.proof-header, .proof-goal, .subproof-goal-display { padding: 0.5em; margin-bottom: 0.5em; background-color: #0f172a; border-radius: 0.25em; }
 .proof-header span, .proof-goal span, .subproof-goal-display span { font-weight: bold; color: #60a5fa; }
-.subproof-goal-display { color: #f59e0b; /* Amber for sub-goal */ }
+.subproof-goal-display { color: #f59e0b; }
 
 /* Feedback Area Styles */
-#feedback-container { display: flex; align-items: center; justify-content: center; margin-top: 0.5rem; min-height: 1.5rem; }
-#proof-feedback { text-align: center; font-weight: bold; flex-grow: 1; margin: 0 0.5rem; }
+#feedback-container { display: flex; align-items: center; justify-content: center; margin-top: 0.5em; min-height: 1.5em; }
+#proof-feedback { text-align: center; font-weight: bold; flex-grow: 1; margin: 0 0.5em; font-size: calc(var(--base-font-size) * 1.8); }
 .feedback-nav-button {
-    background-color: #4b5563; /* slate-600 */
-    color: #cbd5e1; /* slate-300 */
-    border: 1px solid #64748b; /* slate-500 */
-    border-radius: 50%;
-    width: 1.5rem;
-    height: 1.5rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: background-color 0.2s;
-    flex-shrink: 0;
+    width: 1.5em;
+    height: 1.5em;
+    font-size: calc(var(--base-font-size) * 1.5); /* Scale buttons */
 }
-.feedback-nav-button:hover { background-color: #64748b; }
-.feedback-nav-button:disabled { opacity: 0.4; cursor: not-allowed; }
-
 
 /* WFF Construction & Inference Rules Specifics */
-.tool-area { margin-bottom: 0.8rem; }
-.tool-area h3 { margin-bottom: 0.2rem; }
-.tool-button, .draggable-var, .connective-hotspot { border: none; padding: 0.5rem; margin: 0.25rem; border-radius: 0.25rem; transition: background-color 0.2s; text-align: center; font-weight: bold; }
+.tool-area { margin-bottom: 0.8em; }
+.tool-button, .draggable-var, .connective-hotspot {
+    border: none;
+    padding: 0.5em;
+    margin: 0.25em;
+    border-radius: 0.25em;
+    transition: background-color 0.2s;
+    text-align: center;
+    font-weight: bold;
+    font-size: calc(var(--base-font-size) * 1.9);
+}
 .tool-button { background-color: #3b82f6; color: white; cursor: pointer; }
 .tool-button:hover { background-color: #2563eb; }
 .draggable-var { background-color: #f5f5dc; color: #3b271a; border: 1px solid #a0522d; cursor: grab; display: inline-block; }
-.draggable-var.fol-predicate { background-color: #dcfce7; color: #14532d; border-color: #16a34a; } /* Green */
-
-/* **FIX**: Remove special styling for FOL variables */
-.draggable-var.fol-variable { 
-    background-color: transparent;
-    color: inherit;
-    border: none;
-    padding: 0.1rem 0.2rem;
-    margin: 0.1rem;
-}
-
+.draggable-var.fol-predicate { background-color: #dcfce7; color: #14532d; border-color: #16a34a; }
+.draggable-var.fol-variable { background-color: transparent; color: inherit; border: none; padding: 0.1em 0.2em; margin: 0.1em; }
 .draggable-var.dragging { opacity: 0.5; cursor: grabbing; }
-.connective-hotspot { background-color: #4b5563; color: white; border: 2px dashed #6b7280; cursor: copy; min-width: 3rem; display: inline-block; padding: 0.5rem 0.3rem; font-size: 0.75rem; }
+.connective-hotspot { background-color: #4b5563; color: white; border: 2px dashed #6b7280; cursor: copy; min-width: 3em; display: inline-block; padding: 0.5em 0.3em; }
 .connective-hotspot.waiting { border-style: solid; border-color: #f59e0b; }
 .connective-hotspot.drag-over { border-color: #60a5fa; background-color: #334155; }
 
-.wff-output-header {
-    display: flex;
-    justify-content: space-between; 
-    align-items: center;
-    margin-bottom: 0.5rem; 
-}
-.wff-output-header h3 {
-     margin-bottom: 0; 
-}
+.wff-output-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5em; }
+.wff-output-header h3 { margin-bottom: 0; }
 
 #wff-output-tray {
-    background-color: #0f172a; padding: 0.5rem; 
-    border-radius: 0.25rem;
-    min-height: 5rem; font-family: monospace; color: #f1f5f9;
-    display: flex; flex-wrap: wrap; gap: 0.5rem; align-content: flex-start;
-    align-items: center; 
-    border: 2px dashed transparent; 
-    position: relative; 
-    /* **NEW:** CSS variable for font size */
-    font-size: var(--wff-tray-font-size, 0.8rem);
+    background-color: #0f172a;
+    padding: 0.5em;
+    border-radius: 0.25em;
+    min-height: 5em;
+    font-family: monospace;
+    color: #f1f5f9;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5em;
+    align-content: flex-start;
+    align-items: center;
+    border: 2px dashed transparent;
+    position: relative;
+    font-size: calc(var(--base-font-size) * 2.2); /* Make WFF tray text scale */
 }
-#wff-output-tray.drag-over-tray {
-    border-color: #60a5fa; 
-    background-color: rgba(96, 165, 250, 0.1);
-}
+#wff-output-tray.drag-over-tray { border-color: #60a5fa; background-color: rgba(96, 165, 250, 0.1); }
 #wff-output-tray .formula { background-color: #3b82f6; color: white; border-color: #1d4ed8; cursor: grab; }
 #wff-output-tray .formula.drag-over { border: 2px dashed #60a5fa; transform: scale(1.1); }
 #wff-output-tray .formula.dragging { opacity: 0.5; cursor: grabbing; }
@@ -240,75 +263,81 @@ button { padding: 0.4rem 0.8rem; }
     background-color: #4b5563;
     color: white;
     border: none;
-    width: 1.5rem;
-    height: 1.5rem;
+    width: 1.5em;
+    height: 1.5em;
     border-radius: 50%;
-    margin-left: 0.25rem;
+    margin-left: 0.25em;
     cursor: pointer;
-    line-height: 1.5rem;
+    line-height: 1.5em;
     padding: 0;
 }
-.wff-zoom-controls button:hover {
-    background-color: #64748b;
-}
+.wff-zoom-controls button:hover { background-color: #64748b; }
 
 #trash-can-drop-area {
-    padding: 0.1rem 0.3rem; 
-    border: 1px dashed #4a5568; 
-    border-radius: 0.25rem;
-    font-size: 0.9rem; 
-    color: #64748b; 
-    cursor: default; 
-    flex-shrink: 0; 
+    padding: 0.1em 0.3em;
+    border: 1px dashed #4a5568;
+    border-radius: 0.25em;
+    font-size: calc(var(--base-font-size) * 1.5);
+    color: #64748b;
+    cursor: default;
+    flex-shrink: 0;
 }
-#trash-can-drop-area.trash-can-drag-over {
-    border-color: #ef4444; 
-    background-color: rgba(239, 68, 68, 0.1); 
-    color: #ef4444;
-}
+#trash-can-drop-area.trash-can-drag-over { border-color: #ef4444; background-color: rgba(239, 68, 68, 0.1); color: #ef4444; }
 
 /* Accordion Styles */
 .accordion-header {
     cursor: pointer;
     background-color: #334155;
-    padding: 0.4rem 0.6rem;
-    border-radius: 0.25rem;
-    margin-bottom: 0.3rem;
+    padding: 0.4em 0.6em;
+    border-radius: 0.25em;
+    margin-bottom: 0.3em;
     border: 1px solid #475569;
+    font-size: calc(var(--base-font-size) * 2.2);
 }
-.accordion-header::after {
-    content: ' ▼';
-    float: right;
-    transition: transform 0.2s ease;
-}
-.accordion-header.closed::after {
-    transform: rotate(-90deg);
-}
-.accordion-content {
-    padding: 0.5rem;
-    border: 1px solid #334155;
-    border-top: none;
-    border-radius: 0 0 0.25rem 0.25rem;
-}
-.accordion-content.hidden {
-    display: none;
-}
+.accordion-header::after { content: ' ▼'; float: right; transition: transform 0.2s ease; }
+.accordion-header.closed::after { transform: rotate(-90deg); }
+.accordion-content { padding: 0.5em; border: 1px solid #334155; border-top: none; border-radius: 0 0 0.25em 0.25em; }
+.accordion-content.hidden { display: none; }
 
-
-.rule-item { background-color: #334155; padding: 0.5rem; margin-bottom: 0.3rem; border-radius: 0.25rem; cursor: pointer; text-align: center; border: 1px solid #475569; user-select: none; }
+/* Rule Item Styles */
+.rule-item {
+    background-color: #334155;
+    padding: 0.5em;
+    margin-bottom: 0.3em;
+    border-radius: 0.25em;
+    cursor: pointer;
+    text-align: center;
+    border: 1px solid #475569;
+    user-select: none;
+    font-size: calc(var(--base-font-size) * 2);
+}
 .rule-item:hover { background-color: #475569; }
 .rule-item.active { background-color: #4a5568; }
-.rule-slots { display: none; padding: 0.5rem; margin-top: 0.3rem; background-color: #2d3748; border-radius: 0.25rem; border: 1px dashed #4a5568; }
-.rule-item.active .rule-slots { display: flex; flex-direction: column; gap: 0.5rem; }
-.drop-slot { background-color: #4a5568; border: 2px dashed #64748b; min-height: 2.5rem; border-radius: 0.25rem; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-style: italic; font-size: 0.75rem; padding: 0.3rem; transition: transform 0.2s ease-in-out; }
+.rule-slots { display: none; padding: 0.5em; margin-top: 0.3em; background-color: #2d3748; border-radius: 0.25em; border: 1px dashed #4a5568; }
+.rule-item.active .rule-slots { display: flex; flex-direction: column; gap: 0.5em; }
+.drop-slot {
+    background-color: #4a5568;
+    border: 2px dashed #64748b;
+    min-height: 2.5em;
+    border-radius: 0.25em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #94a3b8;
+    font-style: italic;
+    font-size: calc(var(--base-font-size) * 0.75);
+    padding: 0.3em;
+    transition: transform 0.2s ease-in-out;
+}
 .drop-slot.drag-over { border-color: #60a5fa; background-color: #334155; transform: scale(1.05); }
-.apply-rule-button { background-color: #10b981; margin-top: 0.5rem; color: white; border: none; cursor: pointer; }
+.apply-rule-button { background-color: #10b981; margin-top: 0.5em; color: white; border: none; cursor: pointer; }
 .apply-rule-button:hover { background-color: #059669; }
 
-.introjs-tooltip {
-    color: #1f2937;
-}
+/* Intro.js overrides */
+.introjs-tooltip { color: #1f2937; }
+.introjs-tooltiptext { color: #1f2937; }
 
-.introjs-tooltiptext {
-    color: #1f2937;
+/* Remove obsolete styles */
+html, #game-wrapper, .main-content-grid {
+    /* These are no longer used by the new layout engine */
 }

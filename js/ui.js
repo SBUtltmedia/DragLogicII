@@ -8,10 +8,9 @@ import { startTutorial, propositionalTutorialSteps, folTutorialSteps } from './t
 
 // --- DOM Element References ---
 // These are cached once and are not part of the state
-let gameWrapper, wffOutputTray, draggableVariables, connectiveHotspots, trashCanDropArea, ruleItems, proofList, proofFeedbackDiv, subGoalDisplayContainer, gameTitle, prevFeedbackBtn, nextFeedbackBtn, zoomInWffBtn, zoomOutWffBtn, helpIcon;
+let wffOutputTray, draggableVariables, connectiveHotspots, trashCanDropArea, ruleItems, proofList, proofFeedbackDiv, subGoalDisplayContainer, gameTitle, prevFeedbackBtn, nextFeedbackBtn, zoomInWffBtn, zoomOutWffBtn, helpIcon;
 
 function cacheDomElements() {
-    gameWrapper = document.getElementById('game-wrapper');
     wffOutputTray = document.getElementById('wff-output-tray');
     draggableVariables = document.querySelectorAll('.draggable-var');
     connectiveHotspots = document.querySelectorAll('.connective-hotspot');
@@ -258,8 +257,6 @@ export function addEventListeners() {
     zoomInWffBtn.addEventListener('click', () => EventBus.emit('wff:zoom', 1));
     zoomOutWffBtn.addEventListener('click', () => EventBus.emit('wff:zoom', -1));
 
-    gameWrapper.addEventListener('dblclick', handleWrapperZoom);
-
     setupProofLineDragging(proofList);
 
     // --- Event Bus Subscriptions ---
@@ -290,7 +287,7 @@ export function addEventListeners() {
     EventBus.on('subgoal:update', updateSubGoalDisplay);
     EventBus.on('problem:loaded', render);
     EventBus.on('feedback:clear', () => {
-        store.getState().clearFeedback();
+        store.dispatch({ type: 'CLEAR_FEEDBACK' });
         displayCurrentFeedback();
     });
     EventBus.on('game:win', () => {
@@ -322,12 +319,7 @@ export function addEventListeners() {
     });
 }
 
-function handleWrapperZoom(e) {
-    if (e.target.closest('button, .draggable-var, .formula, .rule-item, .connective-hotspot, .accordion-header, #proof-lines li')) {
-        return;
-    }
-    gameWrapper.classList.toggle('zoomed');
-}
+
 
 EventBus.on('game:win', () => {
     const { currentProblem } = store.getState();

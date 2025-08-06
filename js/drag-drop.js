@@ -256,23 +256,17 @@ export function handleDragStartProofLine(e) {
 
 export function handleDropOnProofArea(e) {
     e.preventDefault();
-    const { proofList } = store.getState();
-    const targetProofList = e.target.closest('ol#proof-lines') || proofList;
-    targetProofList.classList.remove('drag-over-proof');
+    const proofList = document.getElementById('proof-lines');
+    proofList.classList.remove('drag-over-proof');
 
     const data = getDragData(e);
     if (!data || !data.formula) { return; }
 
     const targetLi = e.target.closest('li[data-line-number]');
-    const formulaToProcess = data.formula.trim();
-    const elementIdToProcess = data.elementId;
 
     // If from constructor (tray or button) and dropped on the main proof area...
     if ((data.sourceType.includes('variable') || data.sourceType.includes('predicate') || data.sourceType === 'wff-tray-formula') && !targetLi) {
-        EventBus.emit('proof:startRAA', { formula: formulaToProcess });
-        if (data.sourceType === 'wff-tray-formula') {
-            EventBus.emit('wff:remove', { elementId: elementIdToProcess });
-        }
+        EventBus.emit('rule:apply', { ruleName: 'RAA', droppedFormula: data.formula, elementId: data.elementId, sourceType: data.sourceType });
     } else if (data.sourceType === 'proof-line-formula') {
         const { formula: draggedFormulaText, lineId: draggedLineId, scopeLevel: draggedScope } = data;
         if (targetLi) {

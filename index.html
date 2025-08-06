@@ -10,173 +10,211 @@
 </head>
 <body>
 
-    <div id="game-wrapper">
+    <div id="main-container">
         <div id="help-icon">?</div>
         <h1 id="game-title" class="text-4xl font-bold text-center text-sky-300 px-4 py-2">Natural Deduction Contraption</h1>
 
-        <div class="main-content-grid">
-            <div id="wff-construction-area" class="game-section">
-                <h2>WFF Constructor</h2>
+        <div id="wff-construction-area" class="game-section">
+            <h2>WFF Constructor</h2>
 
-                <!-- Propositional Logic Accordion -->
-                <div id="prop-logic-accordion" class="accordion">
-                    <div id="prop-logic-header" class="accordion-header" role="button" tabindex="0" aria-expanded="true">
-                        Propositional Logic
+            <!-- Propositional Logic Accordion -->
+            <div id="prop-logic-accordion" class="accordion">
+                <div id="prop-logic-header" class="accordion-header" role="button" tabindex="0" aria-expanded="true">
+                    Propositional Logic
+                </div>
+                <div id="prop-logic-content" class="accordion-content">
+                    <div class="tool-area">
+                        <h3>Drag Variables:</h3>
+                        <div class="draggable-var" draggable="true" data-type="prop-variable" data-symbol="P" role="button" aria-grabbed="false">P</div>
+                        <div class="draggable-var" draggable="true" data-type="prop-variable" data-symbol="Q" role="button" aria-grabbed="false">Q</div>
+                        <div class="draggable-var" draggable="true" data-type="prop-variable" data-symbol="R" role="button" aria-grabbed="false">R</div>
+                        <div class="draggable-var" draggable="true" data-type="prop-variable" data-symbol="S" role="button" aria-grabbed="false">S</div>
                     </div>
-                    <div id="prop-logic-content" class="accordion-content">
-                        <div class="tool-area">
-                            <h3>Drag Variables:</h3>
-                            <div class="draggable-var" draggable="true" data-type="prop-variable" data-symbol="P" role="button" aria-grabbed="false">P</div>
-                            <div class="draggable-var" draggable="true" data-type="prop-variable" data-symbol="Q" role="button" aria-grabbed="false">Q</div>
-                            <div class="draggable-var" draggable="true" data-type="prop-variable" data-symbol="R" role="button" aria-grabbed="false">R</div>
-                            <div class="draggable-var" draggable="true" data-type="prop-variable" data-symbol="S" role="button" aria-grabbed="false">S</div>
-                        </div>
-                        <div class="tool-area">
-                            <h3>Drop on Connectives:</h3>
-                            <div class="connective-hotspot" data-connective="~" title="Drop ONE formula/var here for NOT" role="region" aria-dropeffect="copy">~</div>
-                            <div class="connective-hotspot" data-connective="∧" title="Drop TWO formulas/vars here for AND" role="region" aria-dropeffect="copy">∧</div>
-                            <div class="connective-hotspot" data-connective="∨" title="Drop TWO formulas/vars here for OR" role="region" aria-dropeffect="copy">∨</div>
-                            <div class="connective-hotspot" data-connective="→" title="Drop TWO formulas/vars here for IMPLIES" role="region" aria-dropeffect="copy">→</div>
-                            <div class="connective-hotspot" data-connective="↔" title="Drop TWO formulas/vars here for IFF" role="region" aria-dropeffect="copy">↔</div>
-                        </div>
+                    <div class="tool-area">
+                        <h3>Drop on Connectives:</h3>
+                        <div class="connective-hotspot" data-connective="~" title="Drop ONE formula/var here for NOT" role="region" aria-dropeffect="copy">~</div>
+                        <div class="connective-hotspot" data-connective="∧" title="Drop TWO formulas/vars here for AND" role="region" aria-dropeffect="copy">∧</div>
+                        <div class="connective-hotspot" data-connective="∨" title="Drop TWO formulas/vars here for OR" role="region" aria-dropeffect="copy">∨</div>
+                        <div class="connective-hotspot" data-connective="→" title="Drop TWO formulas/vars here for IMPLIES" role="region" aria-dropeffect="copy">→</div>
+                        <div class="connective-hotspot" data-connective="↔" title="Drop TWO formulas/vars here for IFF" role="region" aria-dropeffect="copy">↔</div>
                     </div>
                 </div>
-
-                <!-- First-Order Logic Accordion -->
-                <div id="fol-logic-accordion" class="accordion">
-                    <div id="fol-logic-header" class="accordion-header closed" role="button" tabindex="0" aria-expanded="false">
-                        First-Order Logic
-                    </div>
-                    <div id="fol-logic-content" class="accordion-content hidden">
-                        <div class="tool-area">
-                            <h3>Drag Predicates:</h3>
-                            <div class="draggable-var fol-predicate" draggable="true" data-type="predicate" data-symbol="F" role="button" aria-grabbed="false">F</div>
-                            <div class="draggable-var fol-predicate" draggable="true" data-type="predicate" data-symbol="G" role="button" aria-grabbed="false">G</div>
-                            <div class="draggable-var fol-predicate" draggable="true" data-type="predicate" data-symbol="H" role="button" aria-grabbed="false">H</div>
-                        </div>
-                        <div class="tool-area">
-                            <h3>Drag Variables:</h3>
-                            <div class="draggable-var fol-variable" draggable="true" data-type="fol-variable" data-symbol="x" role="button" aria-grabbed="false">x</div>
-                            <div class="draggable-var fol-variable" draggable="true" data-type="fol-variable" data-symbol="y" role="button" aria-grabbed="false">y</div>
-                            <div class="draggable-var fol-variable" draggable="true" data-type="fol-variable" data-symbol="z" role="button" aria-grabbed="false">z</div>
-                        </div>
-                        <div class="tool-area">
-                            <h3>Drop on Quantifiers/Descriptions:</h3>
-                            <div class="connective-hotspot" data-connective="∀" title="Drop a variable, then a formula" role="region" aria-dropeffect="copy">∀</div>
-                            <div class="connective-hotspot" data-connective="∃" title="Drop a variable, then a formula" role="region" aria-dropeffect="copy">∃</div>
-                            <div class="connective-hotspot" data-connective="ι" title="Drop a variable, then a formula for a definite description" role="region" aria-dropeffect="copy">ι</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="wff-output-header mt-4">
-                    <h3>WFF Output</h3>
-                    <div class="flex items-center">
-                        <div class="wff-zoom-controls">
-                            <button id="zoom-out-wff" title="Decrease size" aria-label="Decrease WFF size">-</button>
-                            <button id="zoom-in-wff" title="Increase size" aria-label="Increase WFF size">+</button>
-                        </div>
-                        <div id="trash-can-drop-area" class="ml-2" title="Drag WFF from tray here to delete" role="region" aria-dropeffect="move">🗑️</div>
-                    </div>
-                </div>
-                <div id="wff-output-tray" title="Drag WFFs here to construct, or to proof area." role="region" aria-dropeffect="copy move"></div>
             </div>
 
-            <div id="proof-area" class="game-section">
-                <h2>Proof</h2>
-                <div id="proof-problem-info">
-                    <!-- Problem headers will be injected here by JS -->
+            <!-- First-Order Logic Accordion -->
+            <div id="fol-logic-accordion" class="accordion">
+                <div id="fol-logic-header" class="accordion-header closed" role="button" tabindex="0" aria-expanded="false">
+                    First-Order Logic
                 </div>
-                <div id="subproof-goal-display-container" class="mt-2"></div>
-                <div id="feedback-container">
-                    <button id="prev-feedback" class="feedback-nav-button" aria-label="Previous Feedback">&lt;</button>
-                    <div id="proof-feedback" role="alert" aria-live="assertive"></div>
-                    <button id="next-feedback" class="feedback-nav-button" aria-label="Next Feedback">&gt;</button>
+                <div id="fol-logic-content" class="accordion-content hidden">
+                    <div class="tool-area">
+                        <h3>Drag Predicates:</h3>
+                        <div class="draggable-var fol-predicate" draggable="true" data-type="predicate" data-symbol="F" role="button" aria-grabbed="false">F</div>
+                        <div class="draggable-var fol-predicate" draggable="true" data-type="predicate" data-symbol="G" role="button" aria-grabbed="false">G</div>
+                        <div class="draggable-var fol-predicate" draggable="true" data-type="predicate" data-symbol="H" role="button" aria-grabbed="false">H</div>
+                    </div>
+                    <div class="tool-area">
+                        <h3>Drag Variables:</h3>
+                        <div class="draggable-var fol-variable" draggable="true" data-type="fol-variable" data-symbol="x" role="button" aria-grabbed="false">x</div>
+                        <div class="draggable-var fol-variable" draggable="true" data-type="fol-variable" data-symbol="y" role="button" aria-grabbed="false">y</div>
+                        <div class="draggable-var fol-variable" draggable="true" data-type="fol-variable" data-symbol="z" role="button" aria-grabbed="false">z</div>
+                    </div>
+                    <div class="tool-area">
+                        <h3>Drop on Quantifiers/Descriptions:</h3>
+                        <div class="connective-hotspot" data-connective="∀" title="Drop a variable, then a formula" role="region" aria-dropeffect="copy">∀</div>
+                        <div class="connective-hotspot" data-connective="∃" title="Drop a variable, then a formula" role="region" aria-dropeffect="copy">∃</div>
+                        <div class="connective-hotspot" data-connective="ι" title="Drop a variable, then a formula for a definite description" role="region" aria-dropeffect="copy">ι</div>
+                    </div>
                 </div>
-                <ol id="proof-lines" role="list"></ol>
             </div>
 
-            <div id="rules-and-subproofs-column" class="game-section">
-                <div id="subproofs-area">
-                    <h2>Subproofs</h2>
-                    <div class="rule-item" data-rule="CI" data-premises="1" role="button" tabindex="0">
-                        Conditional Introduction (→I)
-                        <div class="rule-slots">
-                            <div class="drop-slot" data-premise-index="0" data-expected-pattern="φ → ψ" role="region" aria-dropeffect="copy">Goal (e.g., φ → ψ)</div>
-                        </div>
+            <div class="wff-output-header mt-4">
+                <h3>WFF Output</h3>
+                <div class="flex items-center">
+                    <div class="wff-zoom-controls">
+                        <button id="zoom-out-wff" title="Decrease size" aria-label="Decrease WFF size">-</button>
+                        <button id="zoom-in-wff" title="Increase size" aria-label="Increase WFF size">+</button>
                     </div>
-                    <div class="rule-item" data-rule="UI" data-premises="1" data-logic-type="fol" role="button" tabindex="0">
-                        Universal Introduction (∀I)
-                        <div class="rule-slots">
-                            <div class="drop-slot" data-premise-index="0" role="region" aria-dropeffect="copy">Goal (e.g., ∀xφx)</div>
-                        </div>
-                    </div>
-                    <div class="rule-item" data-rule="EE" data-premises="2" data-logic-type="fol" role="button" tabindex="0">
-                        Existential Elimination (∃E)
-                        <div class="rule-slots">
-                            <div class="drop-slot" data-premise-index="0" role="region" aria-dropeffect="copy">Major Premise (e.g., ∃xφx)</div>
-                            <div class="drop-slot" data-premise-index="1" role="region" aria-dropeffect="copy">Subproof Conclusion (e.g., ψ)</div>
-                        </div>
+                    <div id="trash-can-drop-area" class="ml-2" title="Drag WFF from tray here to delete" role="region" aria-dropeffect="move">🗑️</div>
+                </div>
+            </div>
+            <div id="wff-output-tray" title="Drag WFFs here to construct, or to proof area." role="region" aria-dropeffect="copy move"></div>
+        </div>
+
+        <div id="proof-area" class="game-section">
+            <h2>Proof</h2>
+            <div id="proof-problem-info">
+                <!-- Problem headers will be injected here by JS -->
+            </div>
+            <div id="subproof-goal-display-container" class="mt-2"></div>
+            <div id="feedback-container">
+                <button id="prev-feedback" class="feedback-nav-button" aria-label="Previous Feedback">&lt;</button>
+                <div id="proof-feedback" role="alert" aria-live="assertive"></div>
+                <button id="next-feedback" class="feedback-nav-button" aria-label="Next Feedback">&gt;</button>
+            </div>
+            <ol id="proof-lines" role="list"></ol>
+        </div>
+
+        <div id="rules-and-subproofs-column" class="game-section">
+            <div id="subproofs-area">
+                <h2>Subproofs</h2>
+                <div class="rule-item" data-rule="CI" data-premises="1" role="button" tabindex="0">
+                    Conditional Introduction (→I)
+                    <div class="rule-slots">
+                        <div class="drop-slot" data-premise-index="0" data-expected-pattern="φ → ψ" role="region" aria-dropeffect="copy">Goal (e.g., φ → ψ)</div>
                     </div>
                 </div>
-                <div id="inference-rules-area" class="mt-4">
-                    <h2>Inference Rules</h2>
-                    <div class="rule-item" data-rule="MP" data-premises="2" role="button" tabindex="0">
-                        Modus Ponens (MP / →E)
-                        <div class="rule-slots">
-                            <div class="drop-slot" data-premise-index="0" data-expected-pattern="φ → ψ" role="region" aria-dropeffect="copy">Premise 1 (e.g., φ → ψ)</div>
-                            <div class="drop-slot" data-premise-index="1" data-expected-pattern="φ" role="region" aria-dropeffect="copy">Premise 2 (e.g., φ)</div>
-                        </div>
+                <div class="rule-item" data-rule="UI" data-premises="1" data-logic-type="fol" role="button" tabindex="0">
+                    Universal Introduction (∀I)
+                    <div class="rule-slots">
+                        <div class="drop-slot" data-premise-index="0" role="region" aria-dropeffect="copy">Goal (e.g., ∀xφx)</div>
                     </div>
-                    <div class="rule-item" data-rule="MT" data-premises="2" role="button" tabindex="0">
-                        Modus Tollens (MT)
-                        <div class="rule-slots">
-                            <div class="drop-slot" data-premise-index="0" data-expected-pattern="φ → ψ" role="region" aria-dropeffect="copy">Premise 1 (e.g., φ → ψ)</div>
-                            <div class="drop-slot" data-premise-index="1" data-expected-pattern="~ψ" role="region" aria-dropeffect="copy">Premise 2 (e.g., ~ψ)</div>
-                        </div>
+                </div>
+                <div class="rule-item" data-rule="EE" data-premises="2" data-logic-type="fol" role="button" tabindex="0">
+                    Existential Elimination (∃E)
+                    <div class="rule-slots">
+                        <div class="drop-slot" data-premise-index="0" role="region" aria-dropeffect="copy">Major Premise (e.g., ∃xφx)</div>
+                        <div class="drop-slot" data-premise-index="1" role="region" aria-dropeffect="copy">Subproof Conclusion (e.g., ψ)</div>
                     </div>
-                    <div class="rule-item" data-rule="AndI" data-premises="2" role="button" tabindex="0">
-                        And Introduction (∧I)
-                        <div class="rule-slots">
-                            <div class="drop-slot" data-premise-index="0" role="region" aria-dropeffect="copy">Premise 1 (e.g., φ)</div>
-                            <div class="drop-slot" data-premise-index="1" role="region" aria-dropeffect="copy">Premise 2 (e.g., ψ)</div>
-                        </div>
+                </div>
+                <div class="rule-item" data-rule="RAA" data-premises="1" role="button" tabindex="0">
+                    Reductio ad Absurdum (RAA)
+                    <div class="rule-slots">
+                        <div class="drop-slot" data-premise-index="0" role="region" aria-dropeffect="copy">Goal (e.g., φ)</div>
                     </div>
-                    <div class="rule-item" data-rule="AndE" data-premises="1" role="button" tabindex="0">
-                        And Elimination (∧E)
-                        <div class="rule-slots">
-                            <div class="drop-slot" data-premise-index="0" data-expected-pattern="φ ∧ ψ" role="region" aria-dropeffect="copy">Premise (e.g., φ ∧ ψ)</div>
-                        </div>
+                </div>
+            </div>
+            <div id="inference-rules-area" class="mt-4">
+                <h2>Inference Rules</h2>
+                <div class="rule-item" data-rule="MP" data-premises="2" role="button" tabindex="0">
+                    Modus Ponens (MP / →E)
+                    <div class="rule-slots">
+                        <div class="drop-slot" data-premise-index="0" data-expected-pattern="φ → ψ" role="region" aria-dropeffect="copy">Premise 1 (e.g., φ → ψ)</div>
+                        <div class="drop-slot" data-premise-index="1" data-expected-pattern="φ" role="region" aria-dropeffect="copy">Premise 2 (e.g., φ)</div>
                     </div>
-                    <!-- **NEW:** Updated UI for Existential Introduction -->
-                    <div class="rule-item" data-rule="EI" data-premises="2" data-logic-type="fol" role="button" tabindex="0">
-                        Existential Introduction (∃I)
-                        <div class="rule-slots">
-                            <div class="drop-slot" data-premise-index="0" role="region" aria-dropeffect="copy">Formula (e.g., F(a))</div>
-                            <div class="drop-slot" data-premise-index="1" role="region" aria-dropeffect="copy">Variable to Generalize (e.g., x)</div>
-                        </div>
+                </div>
+                <div class="rule-item" data-rule="MT" data-premises="2" role="button" tabindex="0">
+                    Modus Tollens (MT)
+                    <div class="rule-slots">
+                        <div class="drop-slot" data-premise-index="0" data-expected-pattern="φ → ψ" role="region" aria-dropeffect="copy">Premise 1 (e.g., φ → ψ)</div>
+                        <div class="drop-slot" data-premise-index="1" data-expected-pattern="~ψ" role="region" aria-dropeffect="copy">Premise 2 (e.g., ~ψ)</div>
                     </div>
-                    <div class="rule-item" data-rule="DN" data-premises="1" role="button" tabindex="0">
-                        Double Negation (DN)
-                        <div class="rule-slots">
-                            <div class="drop-slot" data-premise-index="0" data-expected-pattern="~~φ or φ" role="region" aria-dropeffect="copy">Premise (e.g., ~~φ or φ)</div>
-                        </div>
+                </div>
+                <div class="rule-item" data-rule="AndI" data-premises="2" role="button" tabindex="0">
+                    And Introduction (∧I)
+                    <div class="rule-slots">
+                        <div class="drop-slot" data-premise-index="0" role="region" aria-dropeffect="copy">Premise 1 (e.g., φ)</div>
+                        <div class="drop-slot" data-premise-index="1" role="region" aria-dropeffect="copy">Premise 2 (e.g., ψ)</div>
                     </div>
-                    <div class="rule-item" data-rule="Reiteration" data-premises="1" role="button" tabindex="0">
-                        Reiteration (Re)
-                        <div class="rule-slots">
-                            <div class="drop-slot" data-premise-index="0" role="region" aria-dropeffect="copy">Line to Reiterate</div>
-                        </div>
+                </div>
+                <div class="rule-item" data-rule="AndE" data-premises="1" role="button" tabindex="0">
+                    And Elimination (∧E)
+                    <div class="rule-slots">
+                        <div class="drop-slot" data-premise-index="0" data-expected-pattern="φ ∧ ψ" role="region" aria-dropeffect="copy">Premise (e.g., φ ∧ ψ)</div>
+                    </div>
+                </div>
+                <div class="rule-item" data-rule="Add" data-premises="2" role="button" tabindex="0">
+                    Addition (∨I)
+                    <div class="rule-slots">
+                        <div class="drop-slot" data-premise-index="0" role="region" aria-dropeffect="copy">Existing Line (e.g., φ)</div>
+                        <div class="drop-slot" data-premise-index="1" role="region" aria-dropeffect="copy">WFF to Add (e.g., ψ)</div>
+                    </div>
+                </div>
+                <!-- **NEW:** Updated UI for Existential Introduction -->
+                <div class="rule-item" data-rule="EI" data-premises="2" data-logic-type="fol" role="button" tabindex="0">
+                    Existential Introduction (∃I)
+                    <div class="rule-slots">
+                        <div class="drop-slot" data-premise-index="0" role="region" aria-dropeffect="copy">Formula (e.g., F(a))</div>
+                        <div class="drop-slot" data-premise-index="1" role="region" aria-dropeffect="copy">Variable to Generalize (e.g., x)</div>
+                    </div>
+                </div>
+                <div class="rule-item" data-rule="DN" data-premises="1" role="button" tabindex="0">
+                    Double Negation (DN)
+                    <div class="rule-slots">
+                        <div class="drop-slot" data-premise-index="0" data-expected-pattern="~~φ or φ" role="region" aria-dropeffect="copy">Premise (e.g., ~~φ or φ)</div>
+                    </div>
+                </div>
+                <div class="rule-item" data-rule="Reiteration" data-premises="1" role="button" tabindex="0">
+                    Reiteration (Re)
+                    <div class="rule-slots">
+                        <div class="drop-slot" data-premise-index="0" role="region" aria-dropeffect="copy">Line to Reiterate</div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    
-
     <script src="https://cdnjs.cloudflare.com/ajax/libs/intro.js/7.2.0/intro.min.js"></script>
-   
     <script src="js/main.js" type="module"></script>
+    <script>
+        function resizeLayout() {
+            const mainContainer = document.getElementById('main-container');
+            const htmlElement = document.documentElement;
+            const ASPECT_RATIO = 16 / 9;
+            let viewportWidth = window.innerWidth;
+            let viewportHeight = window.innerHeight;
+            const viewportRatio = viewportWidth / viewportHeight;
+            let containerWidth, containerHeight, top, left;
+            if (viewportRatio > ASPECT_RATIO) {
+                containerHeight = viewportHeight;
+                containerWidth = containerHeight * ASPECT_RATIO;
+                top = 0;
+                left = (viewportWidth - containerWidth) / 2;
+            } else {
+                containerWidth = viewportWidth;
+                containerHeight = containerWidth / ASPECT_RATIO;
+                top = (viewportHeight - containerHeight) / 2;
+                left = 0;
+            }
+            mainContainer.style.width = `${containerWidth}px`;
+            mainContainer.style.height = `${containerHeight}px`;
+            mainContainer.style.top = `${top}px`;
+            mainContainer.style.left = `${left}px`;
+            const rootFontSize = containerWidth / 100;
+            htmlElement.style.fontSize = `${rootFontSize}px`;
+        }
+        window.addEventListener('load', resizeLayout);
+        window.addEventListener('resize', resizeLayout);
+    </script>
 </body>
 </html>

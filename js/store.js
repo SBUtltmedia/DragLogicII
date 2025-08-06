@@ -58,4 +58,19 @@ export const store = create((set) => ({
     setWaitingConnectiveWFF: (wff) => set({ waitingConnectiveWFF: wff }),
 
     setProofLines: (lines) => set({ proofLines: lines }),
+
+    addFeedback: (message, type = 'info') => set(state => ({
+        feedbackHistory: [...state.feedbackHistory, { message, type }],
+        currentFeedbackIndex: state.feedbackHistory.length,
+    })),
+
+    previousFeedback: () => set(state => ({
+        currentFeedbackIndex: Math.max(0, state.currentFeedbackIndex - 1),
+    })),
+
+    nextFeedback: () => set(state => ({
+        currentFeedbackIndex: Math.min(state.feedbackHistory.length - 1, state.currentFeedbackIndex + 1),
+    })),
+
+    clearFeedback: () => set({ feedbackHistory: [], currentFeedbackIndex: -1 }),
 }));

@@ -157,6 +157,32 @@ function attemptAutoAndElimination(ruleItemElement) {
     return { resultFormula: resultFormula, justificationText: `∧E ${conjunctionPremise.line || 'WFF'}`, consumedWffIds: consumedWffIds };
 }
 
+function attemptAutoAddition(ruleItemElement) {
+    const slotsData = validateRuleSlots(ruleItemElement, 2);
+    if (!slotsData) return null;
+    const [premise1, premise2] = slotsData;
+
+    const ast1 = LogicParser.textToAst(premise1.formula);
+    const ast2 = LogicParser.textToAst(premise2.formula);
+
+    if (!ast1 || !ast2) {
+        EventBus.emit('feedback:show', { message: "Addition Error: Invalid formula.", isError: true });
+        return null;
+    }
+
+    const resultAst = { type: 'binary', operator: '∨', left: ast1, right: ast2 };
+
+    const consumedWffIds = [];
+    if (premise1.source === 'wff-tray-formula' && premise1.elementId) consumedWffIds.push(premise1.elementId);
+    if (premise2.source === 'wff-tray-formula' && premise2.elementId) consumedWffIds.push(premise2.elementId);
+
+    return {
+        resultFormula: LogicParser.astToText(resultAst),
+        justificationText: `Add ${premise1.line || 'WFF'}`,
+        consumedWffIds: consumedWffIds
+    };
+}
+
 function attemptAutoExistentialIntroduction(ruleItemElement) {
     const { proofList } = store.getState();
     const slotsData = validateRuleSlots(ruleItemElement, 2);
@@ -312,6 +338,7 @@ export function attemptAutoRule(ruleItemElement) {
         case 'MT': result = attemptAutoModusTollens(ruleItemElement); break;
         case '∧I': result = attemptAutoAndIntroduction(ruleItemElement); break;
         case '∧E': result = attemptAutoAndElimination(ruleItemElement); break;
+        case 'Add': result = attemptAutoAddition(ruleItemElement); break;
         case 'DN': result = attemptAutoDoubleNegation(ruleItemElement); break;
         case 'UI': result = attemptAutoUniversalInstantiation(ruleItemElement); break;
         case '∃I': result = attemptAutoExistentialIntroduction(ruleItemElement); break;
@@ -446,6 +473,7 @@ function handleRuleApply(data) {
     else if (ruleName === "MT") ruleApplicationResult = attemptAutoModusTollens(ruleItemElement);
     else if (ruleName === "AndI") ruleApplicationResult = attemptAutoAndIntroduction(ruleItemElement);
     else if (ruleName === "AndE") ruleApplicationResult = attemptAutoAndElimination(ruleItemElement);
+    else if (ruleName === "Add") ruleApplicationResult = attemptAutoAddition(ruleItemElement);
     else if (ruleName === "EI") ruleApplicationResult = attemptAutoExistentialIntroduction(ruleItemElement);
     else if (ruleName === "DN") ruleApplicationResult = attemptAutoDoubleNegation(ruleItemElement);
     else if (ruleName === "Reiteration" && droppedLineId) {
@@ -466,6 +494,54 @@ function handleRuleApply(data) {
     if (autoAppliedManually) {
         clearRuleSlots(ruleItemElement);
         ruleItemElement.classList.remove('active');
+    }
+
+    if (ruleName === 'RAA') {
+        const ast = LogicParser.textToAst(droppedFormula);
+        if (ast) {
+            const negatedAst = { type: 'negation', operand: ast };
+            const assumptionFormula = LogicParser.astToText(negatedAst);
+
+            const { currentScopeLevel } = store.getState();
+            const showLineItem = addProofLine(`Show: ${droppedFormula}`, "Goal (RAA)", currentScopeLevel, false, true);
+            if (!showLineItem) {
+                return;
+            }
+
+            const subproofId = showLineItem.dataset.subproofId;
+            const showLineFullId = showLineItem.dataset.lineNumber;
+            const newScopeLevel = currentScopeLevel + 1;
+            store.getState().setCurrentScopeLevel(newScopeLevel);
+
+            const newSubGoal = {
+                goal: '⊥', // Contradiction
+                forWff: droppedFormula,
+                type: "RAA",
+                assumptionFormula: assumptionFormula,
+                showLineFullId: showLineFullId,
+                parentLineDisplay: showLineFullId,
+                subLineLetterCode: 97,
+                scope: newScopeLevel,
+                assumptionLineFullId: "",
+                subproofId: subproofId
+            };
+
+            const { subGoalStack } = store.getState();
+            store.getState().updateSubGoalStack([...subGoalStack, newSubGoal]);
+
+            const assumptionLineItem = addProofLine(assumptionFormula, "Assumption (RAA)", newScopeLevel, true);
+            if (assumptionLineItem) {
+                const updatedStack = store.getState().subGoalStack;
+                updatedStack[updatedStack.length - 1].assumptionLineFullId = assumptionLineItem.dataset.lineNumber;
+                store.getState().updateSubGoalStack(updatedStack);
+            }
+
+            if (sourceType === 'wff-tray-formula') { EventBus.emit('wff:remove', { elementId: elementId }); }
+            autoAppliedManually = true;
+        } else {
+            EventBus.emit('feedback:show', { message: "RAA Error: Invalid formula.", isError: true });
+            clearSlot(targetSlot);
+        }
     }
 }
 
