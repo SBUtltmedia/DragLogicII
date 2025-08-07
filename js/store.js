@@ -1,4 +1,4 @@
-import { createStore as create } from 'https://cdn.jsdelivr.net/npm/zustand/vanilla/+esm';
+import { createStore as create } from 'zustand/vanilla';
 
 const initialState = {
     // App state

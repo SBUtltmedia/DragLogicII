@@ -1,7 +1,7 @@
 export default {
-  testEnvironment: 'node',
+  testEnvironment: 'jsdom',
   transform: {
-    '^.+\\.(js|jsx)$': ['@swc/jest']
+    '^.+\\.(js|jsx)$': ['babel-jest']
   },
   testMatch: [
     '**/__tests__/**/*.{js,jsx}',
@@ -12,8 +12,9 @@ export default {
     '!js/main.js',
     '!js/app.js'
   ],
+  setupFilesAfterEnv: ['<rootDir>/__tests__/setup.js'],
   
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
-  }
+  },
 };
