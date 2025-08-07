@@ -1,0 +1,24 @@
+{
+  "name": "drag-logic-ii",
+  "version": "1.0.0",
+  "description": "Natural Deduction Contraption - Drag Logic II",
+  "main": "index.html",
+  "scripts": {
+    "test": "jest",
+    "test:parser": "node test-parser.js"
+  },
+  "devDependencies": {
+    "jest": "^29.5.0",
+    "jsdom": "^20.0.0",
+    "identity-obj-proxy": "^3.0.0"
+  },
+  "keywords": [
+    "logic",
+    "deduction",
+    "natural-deduction",
+    "education"
+  ],
+  "author": "Drag Logic II Team",
+  "license": "MIT",
+  "type": "module"
+}
