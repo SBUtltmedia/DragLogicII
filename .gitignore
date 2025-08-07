@@ -1,0 +1,38 @@
+# Dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# SystemFiles
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+/dist
+/build
+*.bundle.js
+*.min.js
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Test coverage
+/coverage
+/.nyc_output
+
+# OS generated files
+*~
+*.tmp
+*.log
+
+# Node.js
+.nyc_output
+.nyc_coverage
