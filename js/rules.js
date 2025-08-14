@@ -1,5 +1,7 @@
 import { LogicParser } from './parser.js';
 import { EventBus } from './event-bus.js';
+import { store } from './store.js';
+import { addProofLine, startConditionalIntroduction, startRAA } from './proof.js';
 
 /**
  * A registry for all inference rules. Each rule is an object containing its properties.
@@ -25,8 +27,10 @@ export const ruleSet = {
         apply: ({ droppedFormula, sourceType, elementId }) => {
             const ast = LogicParser.textToAst(droppedFormula);
             if (ast && ast.type === 'binary' && ast.operator === '→') {
-                // This would invoke startConditionalIntroduction from proof.js (not mocked)
-                // For testing purposes, we'll just verify it's a valid function
+                startConditionalIntroduction(ast);
+                if (sourceType === 'wff-tray-formula') {
+                    EventBus.emit('wff:remove', { elementId });
+                }
                 return true; // Indicates success
             }
             EventBus.emit('feedback:show', { message: "→I Error: Dropped formula must be a conditional (φ → ψ).", isError: true });
@@ -45,7 +49,10 @@ export const ruleSet = {
         apply: ({ droppedFormula, sourceType, elementId }) => {
             const ast = LogicParser.textToAst(droppedFormula);
             if (ast) {
-                // This would invoke startRAA from proof.js (not mocked)
+                startRAA(ast);
+                if (sourceType === 'wff-tray-formula') {
+                    EventBus.emit('wff:remove', { elementId });
+                }
                 return true;
             }
             EventBus.emit('feedback:show', { message: "RAA Error: Invalid formula.", isError: true });
@@ -143,9 +150,43 @@ export const ruleSet = {
             const ast = LogicParser.textToAst(premise.formula);
 
             if (ast && ast.type === 'quantifier' && ast.quantifier === '∀') {
-                // This would prompt for an instantiation - we'll mock this as returning null
+                const term = prompt(`Instantiate "${ast.variable}" to what term?`);
+                if (!term) {
+                    EventBus.emit('feedback:show', { message: "UI Error: You must provide a term to instantiate.", isError: true });
+                    return null;
+                }
+
+                function replaceInAst(ast, fromVar, toTerm) {
+                    if (!ast) return null;
+                    if (ast.type === 'variable' && ast.value === fromVar) {
+                        return toTerm;
+                    }
+                    if (ast.type === 'predicate') {
+                        const newArgs = ast.args.map(arg => replaceInAst(arg, fromVar, toTerm));
+                        return { ...ast, args: newArgs };
+                    }
+                    if (ast.type === 'negation') {
+                         return { ...ast, operand: replaceInAst(ast.operand, fromVar, toTerm) };
+                    }
+                    if (ast.type === 'binary') {
+                        return { ...ast, left: replaceInAst(ast.left, fromVar, toTerm), right: replaceInAst(ast.right, fromVar, toTerm) };
+                    }
+                     if (ast.type === 'quantifier') {
+                         if (ast.variable === fromVar) return ast; // Variable is bound, do not replace.
+                         return { ...ast, formula: replaceInAst(ast.formula, fromVar, toTerm) };
+                    }
+                    return ast;
+                }
+
+                const termAst = LogicParser.textToAst(term);
+                if (!termAst) {
+                    EventBus.emit('feedback:show', { message: `UI Error: Invalid term "${term}".`, isError: true });
+                    return null;
+                }
+
+                const resultAst = replaceInAst(ast.formula, ast.variable, termAst);
                 return {
-                    resultFormula: 'UI',
+                    resultFormula: LogicParser.astToText(resultAst),
                     justificationText: `UI ${premise.line}`,
                 };
             }
@@ -166,7 +207,38 @@ export const ruleSet = {
             const ast = LogicParser.textToAst(premise.formula);
 
             if (ast && ast.type === 'quantifier' && ast.quantifier === '∃') {
-                // This would prompt for an instantiation and set up a subproof
+                const newVar = prompt(`Instantiate "${ast.variable}" with what new variable?`);
+                if (!newVar || !/^[a-w]/.test(newVar)) {
+                    EventBus.emit('feedback:show', { message: "EI Error: You must provide a new variable (a-w).", isError: true });
+                    return null;
+                }
+
+                function replaceInAst(ast, fromVar, toVar) {
+                    if (!ast) return null;
+                    if (ast.type === 'variable' && ast.value === fromVar) {
+                        return { type: 'variable', value: toVar };
+                    }
+                    if (ast.type === 'predicate') {
+                        const newArgs = ast.args.map(arg => replaceInAst(arg, fromVar, toVar));
+                        return { ...ast, args: newArgs };
+                    }
+                    if (ast.type === 'negation') {
+                         return { ...ast, operand: replaceInAst(ast.operand, fromVar, toVar) };
+                    }
+                    if (ast.type === 'binary') {
+                        return { ...ast, left: replaceInAst(ast.left, fromVar, toVar), right: replaceInAst(ast.right, fromVar, toTerm) };
+                    }
+                     if (ast.type === 'quantifier') {
+                         if (ast.variable === fromVar) return ast; // Variable is bound, do not replace.
+                         return { ...ast, formula: replaceInAst(ast.formula, fromVar, toVar) };
+                    }
+                    return ast;
+                }
+
+                const assumptionAst = replaceInAst(ast.formula, ast.variable, newVar);
+                const assumptionFormula = LogicParser.astToText(assumptionAst);
+
+                startExistentialInstantiation(premise.formula, assumptionFormula, newVar);
                 return true;
             }
             EventBus.emit('feedback:show', { message: "EI Error: The premise must be an existentially quantified formula (∃xφx).", isError: true });
@@ -188,14 +260,25 @@ export const ruleSet = {
             const ast1 = LogicParser.textToAst(premise1.formula);
             const ast2 = LogicParser.textToAst(premise2.formula);
 
-            if (ast1 && ast2 && LogicParser.areAstsEqual(ast1.left, ast2)) {
+            // Case 1: Premise 1 is the conditional
+            if (ast1 && ast1.type === 'binary' && ast1.operator === '→' && ast2 && LogicParser.areAstsEqual(ast1.left, ast2)) {
                 return {
                     resultFormula: LogicParser.astToText(ast1.right),
                     justificationText: `MP ${premise1.line}, ${premise2.line}`,
                     consumedWffIds: []
                 };
             }
-            EventBus.emit('feedback:show', { message: "MP Error: The second premise must match the antecedent of the first.", isError: true });
+
+            // Case 2: Premise 2 is the conditional
+            if (ast2 && ast2.type === 'binary' && ast2.operator === '→' && ast1 && LogicParser.areAstsEqual(ast2.left, ast1)) {
+                return {
+                    resultFormula: LogicParser.astToText(ast2.right),
+                    justificationText: `MP ${premise1.line}, ${premise2.line}`,
+                    consumedWffIds: []
+                };
+            }
+
+            EventBus.emit('feedback:show', { message: "MP Error: The premises must be of the form φ → ψ and φ.", isError: true });
             return null;
         }
     },
@@ -262,9 +345,17 @@ export const ruleSet = {
             }
             const leftPart = LogicParser.astToText(ast.left);
             const rightPart = LogicParser.astToText(ast.right);
-            // We mock the user choice, always pick option 1
+            const choice = prompt(`From "${conjunctionPremise.formula}", extract:\n1. "${leftPart}" (Left)\n2. "${rightPart}" (Right)`, "1");
+
+            let resultFormula = null;
+            if (choice === "1") resultFormula = leftPart;
+            else if (choice === "2") resultFormula = rightPart;
+            else {
+                EventBus.emit('feedback:show', { message: "∧E: No valid choice made.", isError: true });
+                return null;
+            }
             return {
-                resultFormula: leftPart,
+                resultFormula: resultFormula,
                 justificationText: `∧E ${conjunctionPremise.line}`,
                 consumedWffIds: []
             };
@@ -310,7 +401,7 @@ export const ruleSet = {
             if (ast.type === 'negation' && ast.operand.type === 'negation') {
                 resultAst = ast.operand.operand; // ~~A -> A
             } else {
-                resultAst = { type: 'negation', operand: { type: 'negation', operand: ast } }; // A -> ~~A
+                resultAst = { type: 'negation', operand: { type: 'negation', operand: ast } }; // A -> ~~
             }
             return {
                 resultFormula: LogicParser.astToText(resultAst),
@@ -325,8 +416,11 @@ export const ruleSet = {
         logicType: 'prop',
         slots: [{ placeholder: 'Line to Reiterate', accepts: ['proof-line-formula'] }],
         apply: ({ droppedFormula, droppedLineId }) => {
-            // Mock the behavior of addProofLine function
-            return true;
+            const { currentScopeLevel } = store.getState();
+            if (addProofLine(droppedFormula, `Re ${droppedLineId}`, currentScopeLevel)) {
+                return true;
+            }
+            return false;
         }
     },
     // --- FOL Rules ---
@@ -383,8 +477,7 @@ function getRuleSlotData(ruleItemElement) {
 
 function validateAndFillSlot(targetSlot, data) {
     const { droppedFormula, droppedLineId, droppedScope, elementId, sourceType } = data;
-    // Mock store state
-    const currentScopeLevel = 0;
+    const { currentScopeLevel } = store.getState();
 
     if (sourceType === 'proof-line-formula' && droppedScope > currentScopeLevel) {
         EventBus.emit('feedback:show', { message: "Rule Error: Cannot use line from inner, closed subproof.", isError: true });
@@ -425,38 +518,69 @@ function validateAndFillSlot(targetSlot, data) {
         EventBus.emit('feedback:show', { message: e.message, isError: true });
         return false;
     }
+
+    // --- FIX: Directly update the dataset before emitting the event ---
+    targetSlot.dataset.source = sourceType;
+    targetSlot.dataset.formula = droppedFormula;
+    if (droppedLineId) {
+        targetSlot.dataset.line = droppedLineId;
+    } else {
+        delete targetSlot.dataset.line;
+    }
+    if (elementId) {
+        targetSlot.dataset.elementId = elementId;
+    }
+
+    // Emit event for UI updates (e.g., changing style)
+    EventBus.emit('rules:fillSlot', {
+        slot: targetSlot,
+        data: { formula: droppedFormula, lineId: droppedLineId }
+    });
+
     return true;
 }
 
-function handleRuleApply(ruleItemElement, data) {
-    const slots = getRuleSlotData(ruleItemElement);
-    
-    // Validation and filling of slots
-    for (let i = 0; i < slots.length; i++) {
-        if (!validateAndFillSlot(slots[i], data[i])) {
-            return;
-        }
-    }
 
-    // Apply the rule function
-    const ruleName = ruleItemElement.dataset.ruleName;
-    const ruleData = ruleSet[ruleName];
-    
-    if (!ruleData) {
-        EventBus.emit('feedback:show', { message: `Invalid rule name: ${ruleName}`, isError: true });
+function handleRuleApply(data) {
+    const { ruleName, droppedFormula, droppedLineId, droppedScope, elementId, sourceType, targetSlot, ruleItemElement } = data;
+    const rule = ruleSet[ruleName];
+    if (!rule) return;
+
+    // --- Handle Subproof Rules ---
+    if (rule.isSubproof) {
+        if (rule.apply({ droppedFormula, sourceType, elementId })) {
+            // If the rule was applied via a rule item, clear its slots.
+            if (ruleItemElement) {
+                EventBus.emit('rules:clearSlots', ruleItemElement);
+                EventBus.emit('rules:deactivate');
+            }
+        } else {
+            // If the application failed and it was via a slot, clear the slot.
+            if (targetSlot) {
+                EventBus.emit('rules:clearSlot', targetSlot);
+            }
+        }
         return;
     }
 
-    try {
-        // Apply the actual rule logic (this is the key part to test)
-        const result = ruleData.apply(data);
-        // Handle result appropriately in test environment
-        if (result && typeof result === 'object') {
-            // This would normally update the UI or store state
-        } else if (typeof result === 'boolean' && !result) {
-            // This would be a false return, meaning apply failed
+    // --- Handle Standard Rules ---
+    if (!validateAndFillSlot(targetSlot, data)) {
+        return;
+    }
+
+    const slotsData = getRuleSlotData(ruleItemElement);
+    const filledSlots = slotsData.filter(s => s.formula);
+
+    if (filledSlots.length === rule.premises) {
+        const result = rule.apply(slotsData);
+        if (result && result.resultFormula) {
+            const { currentScopeLevel } = store.getState();
+            addProofLine(result.resultFormula, result.justificationText, currentScopeLevel);
+            if (result.consumedWffIds && result.consumedWffIds.length > 0) {
+                result.consumedWffIds.forEach(id => EventBus.emit('wff:remove', { elementId: id }));
+            }
+            EventBus.emit('rules:clearSlots', ruleItemElement);
+            EventBus.emit('rules:deactivate');
         }
-    } catch(e) {
-        EventBus.emit('feedback:show', { message: `Rule error: ${e.message}`, isError: true });
     }
 }

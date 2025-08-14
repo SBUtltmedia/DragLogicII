@@ -28,7 +28,7 @@ export function loadProblem(set, problemNumber) {
     const problemData = problemSets[set].problems[problemNum - 1];
     const problemPayload = {
         problem: { set, number: problemNum },
-        premises: problemData.premises.map(p => ({ formula: p, justification: "Premise" })),
+        premises: problemData.premises,
         goalFormula: problemData.goal
     };
 
@@ -49,7 +49,6 @@ EventBus.on('problem:next', () => {
 
 function resetProofState() {
     store.getState().resetProof();
-    ui.render();
 }
 
 function getNextProblem() {

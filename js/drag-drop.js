@@ -279,7 +279,7 @@ export function handleDropOnProofArea(e) {
     const targetLi = e.target.closest('li[data-line-number]');
 
     if ((data.sourceType.includes('variable') || data.sourceType.includes('predicate') || data.sourceType === 'wff-tray-formula') && !targetLi) {
-        EventBus.emit('rule:apply', { ruleName: 'RAA', droppedFormula: data.formula, elementId: data.elementId, sourceType: data.sourceType });
+        EventBus.emit('rule:apply', { ruleName: 'RAA', droppedFormula: data.formula, droppedAst: data.ast, elementId: data.elementId, sourceType: data.sourceType });
     } else if (data.sourceType === 'proof-line-formula') {
         const { formula: draggedFormulaText, lineId: draggedLineId, scopeLevel: draggedScope } = data;
         if (targetLi) {
@@ -340,5 +340,6 @@ export function handleDropOnRuleSlot(e, ruleItemElement) {
         ruleItemElement
     };
 
+    console.log('[handleDropOnRuleSlot] Firing rule:apply with payload:', eventPayload);
     EventBus.emit('rule:apply', eventPayload);
 }

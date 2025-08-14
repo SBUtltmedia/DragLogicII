@@ -1,4 +1,6 @@
-import { createStore as create } from 'zustand/vanilla';
+import zustand from 'zustand';
+
+const create = zustand.create || zustand.default || zustand;
 
 const initialState = {
     // App state
@@ -87,3 +89,12 @@ export const store = create((set) => ({
         return { wffTray: state.wffTray.filter(wff => wff.elementId !== elementId) };
     }),
 }));
+
+export const useStore = store;
+export const dispatch = store.dispatch;
+export const getState = store.getState;
+export const setState = store.setState;
+export const subscribe = store.subscribe;
+export const destroy = store.destroy;
+export const replaceReducer = store.replaceReducer;
+export const getInitialState = () => initialState;

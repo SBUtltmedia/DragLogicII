@@ -64,13 +64,13 @@ export const LogicParser = (() => {
         if(token === '∀' || token === '∃') {
             const quantifier = consume();
             const variable = consume();
-            const formula = parseExpression(operators['~'].prec); // Quantifiers bind tightly
+            const formula = parseExpression(0); // Quantifiers bind tightly
              return { type: 'quantifier', quantifier, variable, formula };
         }
         if(token === 'ι') {
             const operator = consume();
             const variable = consume();
-            const formula = parseExpression(operators['~'].prec); // Iota binds tightly
+            const formula = parseExpression(0); // Iota binds tightly
             return { type: 'description', operator, variable, formula };
         }
         throw new Error(`Unexpected token at start of expression: ${token}`);

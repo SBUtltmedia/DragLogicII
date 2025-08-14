@@ -24,7 +24,7 @@ describe('Problems Module', () => {
       const firstProblem = problemSets[1].problems[0];
       expect(firstProblem).toBeDefined();
       expect(Array.isArray(firstProblem.premises)).toBe(true);
-      expect(typeof firstProblem.goal).toBe('string');
+      expect(typeof firstProblem.goal.formula).toBe('string');
     });
   });
 });

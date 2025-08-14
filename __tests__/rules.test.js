@@ -1,4 +1,5 @@
 import { ruleSet } from '../js/rules.js';
+import { LogicParser } from '../js/parser.js';
 
 describe('Rules Module', () => {
   describe('ruleSet object', () => {
@@ -27,6 +28,39 @@ describe('Rules Module', () => {
       expect(Object.keys(ruleSet)).toContain('RAA');
       expect(ruleSet.CI.isSubproof).toBe(true);
       expect(ruleSet.RAA.isSubproof).toBe(true);
+    });
+  });
+
+  describe('Modus Ponens (MP) rule', () => {
+    const mpRule = ruleSet.MP;
+
+    it('should correctly apply MP when premises are in order', () => {
+        const slotsData = [
+            { formula: 'P→Q', line: '1' },
+            { formula: 'P', line: '2' }
+        ];
+        const result = mpRule.apply(slotsData);
+        expect(result.resultFormula).toBe('Q');
+        expect(result.justificationText).toBe('MP 1, 2');
+    });
+
+    it('should correctly apply MP when premises are reversed', () => {
+        const slotsData = [
+            { formula: 'P', line: '1' },
+            { formula: 'P→Q', line: '2' }
+        ];
+        const result = mpRule.apply(slotsData);
+        expect(result.resultFormula).toBe('Q');
+        expect(result.justificationText).toBe('MP 1, 2');
+    });
+
+    it('should return null for invalid premises', () => {
+        const slotsData = [
+            { formula: 'P→Q', line: '1' },
+            { formula: 'R', line: '2' }
+        ];
+        const result = mpRule.apply(slotsData);
+        expect(result).toBeNull();
     });
   });
 });

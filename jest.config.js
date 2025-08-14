@@ -1,7 +1,7 @@
 export default {
   testEnvironment: 'jsdom',
   transform: {
-    '^.+\\.(js|jsx)$': ['babel-jest']
+    '^.+\.(js|jsx)$': ['babel-jest']
   },
   testMatch: [
     '**/__tests__/**/*.{js,jsx}',
@@ -12,9 +12,11 @@ export default {
     '!js/main.js',
     '!js/app.js'
   ],
-  setupFilesAfterEnv: ['<rootDir>/__tests__/setup.js'],
-  
   moduleNameMapper: {
-    '^(\\.{1,2}/.*)\\.js$': '$1',
+    '../js/store.js': '<rootDir>/__tests__/mocks__/store.js'
   },
+  testPathIgnorePatterns: [
+    '<rootDir>/__tests__/mocks__/store.js',
+    '<rootDir>/__tests__/setup.js'
+  ]
 };
