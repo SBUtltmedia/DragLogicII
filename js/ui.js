@@ -8,6 +8,7 @@ import { startTutorial, propositionalTutorialSteps, folTutorialSteps } from './t
 
 // --- DOM Element References ---
 let wffOutputTray, draggableVariables, connectiveHotspots, trashCanDropArea, proofList, proofFeedbackDiv, subGoalDisplayContainer, gameTitle, prevFeedbackBtn, nextFeedbackBtn, zoomInWffBtn, zoomOutWffBtn, helpIcon, subproofsArea, inferenceRulesArea;
+let gameWrapper;
 
 function cacheDomElements() {
     wffOutputTray = document.getElementById('wff-output-tray');
@@ -25,6 +26,7 @@ function cacheDomElements() {
     helpIcon = document.getElementById('help-icon');
     subproofsArea = document.getElementById('subproofs-area');
     inferenceRulesArea = document.getElementById('inference-rules-area');
+    gameWrapper = document.getElementById('game-wrapper');
 }
 
 // --- Central Render Function ---
