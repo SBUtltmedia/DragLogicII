@@ -5,7 +5,6 @@ import { ruleSet, handleRuleItemClick, handleRuleItemDragEnter, handleRuleItemDr
 import { handleWffDragStart, handleGenericDragEnd, handleDropOnConnectiveHotspot, handleDropOnWffOutputTray, handleDropOnTrashCan, handleDropOnProofArea, handleDropOnRuleSlot, createDragHandler } from './drag-drop.js';
 import { handleSubproofToggle, setupProofLineDragging } from './proof.js';
 import { startTutorial, propositionalTutorialSteps, folTutorialSteps } from './tutorial.js';
-import { LogicParser } from './parser.js';
 
 // --- DOM Element References ---
 let wffOutputTray, draggableVariables, connectiveHotspots, trashCanDropArea, proofList, proofFeedbackDiv, subGoalDisplayContainer, gameTitle, prevFeedbackBtn, nextFeedbackBtn, zoomInWffBtn, zoomOutWffBtn, helpIcon, subproofsArea, inferenceRulesArea;
@@ -49,16 +48,14 @@ export function render() {
 function checkWinState(state) {
     const { proofLines, goalFormula } = state;
     if (!goalFormula) return;
-    const goalAst = LogicParser.textToAst(goalFormula);
+    const goalAst = goalFormula.ast;
     if (!goalAst) return;
 
-    const hasWon = proofLines.some(line => {
-        if (line.scopeLevel === 0 && line.isProven) {
-            const lineAst = LogicParser.textToAst(line.formula);
-            return lineAst && LogicParser.areAstsEqual(lineAst, goalAst);
-        }
-        return false;
-    });
+    const hasWon = proofLines.some(line => 
+        line.scopeLevel === 0 && 
+        line.isProven && 
+        LogicParser.areAstsEqual(line.formula.ast, goalAst)
+    );
 
     if (hasWon) {
         const { currentProblem } = store.getState();
@@ -199,22 +196,16 @@ function createProofLineElement(lineData) {
 
 
 export function updateProblemDisplay(premises, goalFormula, set, number) {
-    const gameTitleEl = document.getElementById('game-title');
-    const problemInfoDiv = document.getElementById('proof-problem-info');
     const problemSetInfo = problemSets[set];
+    gameTitle.textContent = `Natural Deduction Contraption - ${problemSetInfo.name} #${number}`;
 
-    if (gameTitleEl && problemSetInfo) {
-        gameTitleEl.textContent = `Natural Deduction Contraption - ${problemSetInfo.name} #${number}`;
-    }
-
-    if (problemInfoDiv) {
-        let problemHtml = '';
-        premises.forEach((p, i) => {
-            problemHtml += `<div class="proof-header">Premise ${i + 1}: <span>${p.text}</span></div>`;
-        });
-        problemHtml += `<div class="proof-goal">Prove: <span>${goalFormula}</span></div>`;
-        problemInfoDiv.innerHTML = problemHtml;
-    }
+    const problemInfoDiv = document.getElementById('proof-problem-info');
+    let problemHtml = '';
+    premises.forEach((p, i) => {
+        problemHtml += `<div class="proof-header">Premise ${i + 1}: <span>${p.formula}</span></div>`;
+    });
+    problemHtml += `<div class="proof-goal">Prove: <span>${goalFormula.formula}</span></div>`;
+    problemInfoDiv.innerHTML = problemHtml;
 }
 
 function updateSubGoalDisplay() {
