@@ -14,6 +14,7 @@ describe('UI Module', () => {
         let gameTitle;
 
         beforeEach(() => {
+            // Set up our document body
             document.body.innerHTML = `<h1 id="game-title"></h1>
                 <div id="proof-problem-info"></div>`;
             problemInfoDiv = document.getElementById('proof-problem-info');
@@ -22,24 +23,24 @@ describe('UI Module', () => {
 
         test('should correctly display the problem premises and goal', () => {
             const premises = [
-                { text: 'P → Q' },
-                { text: 'P' }
+                { formula: 'P → Q' },
+                { formula: 'P' }
             ];
-            const goalFormula = 'Q';
+            const goalFormula = { formula: 'Q' };
             const set = 1;
             const number = 1;
 
             updateProblemDisplay(premises, goalFormula, set, number);
 
             expect(gameTitle.textContent).toBe('Natural Deduction Contraption - Test Set #1');
-            expect(problemInfoDiv.innerHTML).toContain('<span>P → Q</span>');
-            expect(problemInfoDiv.innerHTML).toContain('<span>P</span>');
-            expect(problemInfoDiv.innerHTML).toContain('<span>Q</span>');
+            expect(problemInfoDiv.innerHTML).toContain('<div class="proof-header">Premise 1: <span>P → Q</span></div>');
+            expect(problemInfoDiv.innerHTML).toContain('<div class="proof-header">Premise 2: <span>P</span></div>');
+            expect(problemInfoDiv.innerHTML).toContain('<div class="proof-goal">Prove: <span>Q</span></div>');
         });
 
         test('should handle empty premises', () => {
             const premises = [];
-            const goalFormula = 'P ∨ ~P';
+            const goalFormula = { formula: 'P ∨ ~P' };
             const set = 1;
             const number = 2;
 
@@ -47,7 +48,7 @@ describe('UI Module', () => {
 
             expect(gameTitle.textContent).toBe('Natural Deduction Contraption - Test Set #2');
             expect(problemInfoDiv.innerHTML).not.toContain('proof-header');
-            expect(problemInfoDiv.innerHTML).toContain('<span>P ∨ ~P</span>');
+            expect(problemInfoDiv.innerHTML).toContain('<div class="proof-goal">Prove: <span>P ∨ ~P</span></div>');
         });
     });
 });

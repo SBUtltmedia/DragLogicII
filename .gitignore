@@ -36,3 +36,4 @@ Thumbs.db
 # Node.js
 .nyc_output
 .nyc_coverage
+.aider*

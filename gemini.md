@@ -1,3 +1,3 @@
 THe replace tool is currently not working in MacOS and will constantly fail, 
 you need to always use instead.
-Try to keep the jest test up to date with all code changes
+When modifying a file, whenever possible WFFs should be treated as AST with some exceptions like UI and problem sets for ease on human creation of problem sets. 

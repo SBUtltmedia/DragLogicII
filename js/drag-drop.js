@@ -1,345 +1,101 @@
-import { store } from './store.js';
 import { EventBus } from './event-bus.js';
-import { LogicParser } from './parser.js';
-import { isNegationOf } from './proof.js';
-import { ruleSet } from './rules.js';
+import { store } from './store.js';
+import { handleRuleItemClick } from './rules.js';
 
-const DRAG_DATA_TYPE = 'application/x-nd-drag-data';
-
-// --- Helper Functions ---
-function clearWffInProgress() {
-    store.getState().setWffConstruction({ firstOperand: null, connective: null });
-    EventBus.emit('ui:resetHotspots');
-}
-
-
+// --- Drag Data Utilities ---
 export function setDragData(event, dataObject) {
     try {
         const jsonDataString = JSON.stringify(dataObject);
-        event.dataTransfer.setData(DRAG_DATA_TYPE, jsonDataString);
+        event.dataTransfer.setData('application/json', jsonDataString);
         event.dataTransfer.effectAllowed = 'copyMove';
-    } catch (err) { 
-        console.error("Error in setDragData:", err, dataObject); 
-        EventBus.emit('feedback:show', { message: `Drag Error: Could not set drag data.`, isError: true });
-    }
+    } catch (err) { console.error("Error in setDragData:", err, dataObject); }
 }
 
-export function getDragData(event) {
-    const jsonDataString = event.dataTransfer.getData(DRAG_DATA_TYPE);
-    if (jsonDataString) {
-        try { return JSON.parse(jsonDataString); }
-        catch (err) { 
-        console.error("Error parsing drag data:", err, "Raw:", jsonDataString); 
-        EventBus.emit('feedback:show', { message: `Drag Error: Could not parse drag data.`, isError: true });
-        return null; 
-    }
-    }
-    return null;
-}
+// --- Drag and Drop Handlers ---
 
-export function createDragHandler(targetSelector, dragOverClass, allowedDataType = DRAG_DATA_TYPE) {
-    return {
-        dragover: function(e) {
-            if (e.dataTransfer.types.includes(allowedDataType)) {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = 'copy';
-                const targetElement = e.target.closest(targetSelector) || (this.matches && this.matches(targetSelector) ? this : null);
-                if (targetElement) targetElement.classList.add(dragOverClass);
-            } else {
-                e.dataTransfer.dropEffect = 'none';
-            }
-        },
-        dragleave: function(e) {
-            const targetElement = e.target.closest(targetSelector) || (this.matches && this.matches(targetSelector) ? this : null);
-            if (targetElement) targetElement.classList.remove(dragOverClass);
-        }
+export function handleWffDragStart(event) {
+    const formulaElement = event.target.closest('.formula');
+    if (!formulaElement) {
+        event.preventDefault();
+        return;
+    }
+    event.dataTransfer.effectAllowed = 'copy';
+    const data = {
+        formula: formulaElement.dataset.formula,
+        source: formulaElement.parentElement.id, // e.g., 'wff-output-tray' or 'proof-lines'
+        elementId: formulaElement.id,
+        line: formulaElement.closest('li')?.dataset.lineNumber
     };
+    setDragData(event, data);
+    event.target.classList.add('dragging');
 }
 
-export function handleWffDragStart(e) {
-    e.stopPropagation();
+export function handleGenericDragEnd(event) {
+    event.target.classList.remove('dragging');
+}
 
-    const target = e.target.closest('.draggable-var, .formula');
-    if (!target) return;
-
-    let symbol = target.dataset.symbol;
-    let type = target.dataset.type;
-    let formula = target.dataset.formula || target.textContent.trim();
-    let sourceType = type;
-
-    if (target.classList.contains('formula')) {
-         sourceType = 'wff-tray-formula';
-    }
-
-    let elementId = target.id;
-    if (!elementId) {
-        target.id = `wff-temp-${Date.now()}`;
-        elementId = target.id;
-    }
-
-    if (!formula) {
-        EventBus.emit('feedback:show', { message: "WFF Drag Start: No formula/symbol data on target.", isError: true });
-        e.preventDefault();
+export function handleDropOnConnectiveHotspot(event) {
+    event.preventDefault();
+    const spot = event.target.closest('.connective-hotspot');
+    const jsonData = event.dataTransfer.getData('application/json');
+    if (!jsonData) {
         return;
     }
+    const data = JSON.parse(jsonData);
+    const connective = spot.dataset.connective;
 
-    setDragData(e, { sourceType: sourceType, formula: formula, elementId: elementId, symbol: symbol });
-    target.classList.add('dragging');
+    store.getState().constructWff(data, connective);
+    spot.classList.remove('drag-over');
 }
 
-export function handleGenericDragEnd(e) {
-    document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
-    document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-}
-
-function handleQuantifierDrop(connective, droppedFormula, droppedSourceType, targetHotspot) {
-    const { wffConstruction } = store.getState();
-    const isQuantifier = connective === '∀' || connective === '∃';
-    const operatorType = isQuantifier ? 'quantifier' : 'description';
-    const operatorName = isQuantifier ? 'Quantifiers' : 'Iota';
-
-    if (!wffConstruction.firstOperand) { // Waiting for a variable
-        if (droppedSourceType !== 'fol-variable') {
-            EventBus.emit('feedback:show', { message: `${operatorName} require a variable first (x, y, or z).`, isError: true });
-            return;
-        }
-        store.getState().setWffConstruction({ firstOperand: droppedFormula, connective: connective });
-        targetHotspot.classList.add('waiting');
-        targetHotspot.textContent = `${connective}${droppedFormula}(?)`;
-    } else { // Already have variable, waiting for formula
-        if (wffConstruction.connective === connective) {
-            const ast = LogicParser.textToAst(droppedFormula);
-            if (!ast) { 
-                EventBus.emit('feedback:show', { message: `Invalid formula dropped on ${operatorName.toLowerCase()}.`, isError: true });
-                return; 
-            }
-            const resultAst = { type: operatorType, operator: connective, variable: wffConstruction.firstOperand, formula: ast };
-            if(isQuantifier) resultAst.quantifier = connective;
-            EventBus.emit('wff:add', { formula: LogicParser.astToText(resultAst), elementId: `wff-tray-${Date.now()}` });
-            clearWffInProgress();
-        } else { 
-            EventBus.emit('feedback:show', { message: `${operatorName} mismatch.`, isError: true });
-            clearWffInProgress(); 
-        }
-    }
-}
-
-export function handleDropOnConnectiveHotspot(e) {
-    e.preventDefault();
-    const targetHotspot = e.target.closest('.connective-hotspot');
-    if (!targetHotspot) return;
-    targetHotspot.classList.remove('drag-over');
-    const data = getDragData(e);
-    console.log('[handleDropOnConnectiveHotspot] Drop data:', data);
-
-    if (!data || !data.formula) { 
-        EventBus.emit('feedback:show', { message: "Drop on Connective: No valid drag data found.", isError: true });
-        return; 
-    }
-
-    const { formula: droppedFormula, elementId: droppedElementId, sourceType: droppedSourceType } = data;
-    const connective = targetHotspot.dataset.connective;
-
-    if (['∀', '∃', 'ι'].includes(connective)) {
-        handleQuantifierDrop(connective, droppedFormula, droppedSourceType, targetHotspot);
+export function handleDropOnWffOutputTray(event) {
+    event.preventDefault();
+    const jsonData = event.dataTransfer.getData('application/json');
+    if (!jsonData) {
         return;
     }
-
-    const { wffConstruction } = store.getState();
-    console.log('[handleDropOnConnectiveHotspot] Current wffConstruction state:', wffConstruction);
-    const droppedAst = LogicParser.textToAst(droppedFormula);
-    if (!droppedAst) { EventBus.emit('feedback:show', { message: "Invalid formula dropped.", isError: true }); return; }
-
-    if (connective === '~') {
-        console.log('[handleDropOnConnectiveHotspot] Handling negation.');
-        const newAst = { type: 'negation', operand: droppedAst };
-        EventBus.emit('wff:add', { formula: LogicParser.astToText(newAst), elementId: `wff-tray-${Date.now()}` });
-        if (droppedSourceType === 'wff-tray-formula') {
-            EventBus.emit('wff:remove', { elementId: droppedElementId });
-        }
-        clearWffInProgress();
-    } else {
-        if (!wffConstruction.firstOperand) {
-            console.log('[handleDropOnConnectiveHotspot] First operand dropped. Setting wffConstruction state.');
-            store.getState().setWffConstruction({ 
-                firstOperand: { formula: droppedFormula, elementId: droppedElementId, sourceType: droppedSourceType }, 
-                connective: connective 
-            });
-            targetHotspot.classList.add('waiting');
-            targetHotspot.textContent = `${droppedFormula} ${connective} ?`;
-        } else {
-            console.log('[handleDropOnConnectiveHotspot] Second operand dropped.');
-            if (wffConstruction.connective === connective) {
-                const firstAst = LogicParser.textToAst(wffConstruction.firstOperand.formula);
-                if (!firstAst) { EventBus.emit('feedback:show', { message: "Invalid first formula.", isError: true }); clearWffInProgress(); return; }
-                const newAst = { type: 'binary', operator: connective, left: firstAst, right: droppedAst };
-                const newFormula = LogicParser.astToText(newAst);
-                console.log('[handleDropOnConnectiveHotspot] Creating new formula:', newFormula);
-                EventBus.emit('wff:add', { formula: newFormula, elementId: `wff-tray-${Date.now()}` });
-
-                if (wffConstruction.firstOperand.sourceType === 'wff-tray-formula') {
-                    console.log('[handleDropOnConnectiveHotspot] Removing first operand from tray:', wffConstruction.firstOperand.elementId);
-                    EventBus.emit('wff:remove', { elementId: wffConstruction.firstOperand.elementId });
-                }
-                if (droppedSourceType === 'wff-tray-formula') {
-                    console.log('[handleDropOnConnectiveHotspot] Removing second operand from tray:', droppedElementId);
-                    EventBus.emit('wff:remove', { elementId: droppedElementId });
-                }
-                clearWffInProgress();
-            } else { 
-                EventBus.emit('feedback:show', { message: "WFF Error: Connective mismatch.", isError: true }); 
-                clearWffInProgress(); 
-            }
-        }
+    const data = JSON.parse(jsonData);
+    
+    // If the item came from the proof, it's a copy, so we add it.
+    // If it came from another source (like another part of the tray), it might be a move.
+    // For simplicity, we'll treat all drops here as requests to add/move to the tray.
+    if (data.source !== 'wff-output-tray') {
+        EventBus.emit('wff:add', { formula: data.formula });
     }
+    
+    document.getElementById('wff-output-tray').classList.remove('drag-over-tray');
 }
 
-export function handleDropOnWffOutputTray(e) {
-    e.preventDefault();
-    const { wffOutputTray } = store.getState();
-    const targetElement = e.target.closest('#wff-output-tray') || wffOutputTray;
-    targetElement.classList.remove('drag-over-tray');
-    const data = getDragData(e);
-    if (!data || !data.formula) { return; }
-
-    const targetFormulaDiv = e.target.closest('.formula');
-    if (targetFormulaDiv && targetFormulaDiv.parentElement === wffOutputTray) {
-         targetFormulaDiv.classList.remove('drag-over');
-         if (data.sourceType === 'fol-variable') {
-            const targetAst = LogicParser.textToAst(targetFormulaDiv.dataset.formula);
-            if (targetAst && targetAst.type === 'predicate') {
-                const newArgs = [...targetAst.args, { type: 'variable', value: data.symbol }];
-                const newAst = { ...targetAst, args: newArgs };
-                EventBus.emit('wff:add', { formula: LogicParser.astToText(newAst), elementId: `wff-tray-${Date.now()}` });
-            } else {
-                 EventBus.emit('feedback:show', { message: "Can only drop FOL variables onto predicates.", isError: true });
-            }
-            return; 
-         }
+export function handleDropOnTrashCan(event) {
+    event.preventDefault();
+    const jsonData = event.dataTransfer.getData('application/json');
+    if (!jsonData) {
+        return;
     }
-
-    if (['prop-variable', 'predicate', 'fol-variable'].includes(data.sourceType)) {
-        EventBus.emit('wff:add', { formula: data.formula, elementId: `wff-tray-${Date.now()}` });
-    } else if (data.sourceType === 'wff-tray-formula') {
-        // Reordering logic can be implemented here if needed
-    }
-}
-
-export function handleDropOnTrashCan(e) {
-    e.preventDefault();
-    const targetTrashCan = e.target.closest('#trash-can-drop-area');
-    if(targetTrashCan) targetTrashCan.classList.remove('trash-can-drag-over');
-
-    const data = getDragData(e);
-    if (data && data.sourceType === 'wff-tray-formula' && data.elementId && data.formula) {
-        const formulaTextOfTrashedItem = data.formula;
+    const data = JSON.parse(jsonData);
+    if (data.elementId) {
         EventBus.emit('wff:remove', { elementId: data.elementId });
-        EventBus.emit('feedback:show', { message: `WFF "${formulaTextOfTrashedItem}" deleted from tray.`, isError: false });
     }
-    store.getState().setDraggedElementForRemoval(null);
+    document.getElementById('trash-can-drop-area').classList.remove('trash-can-drag-over');
 }
 
-export function handleDragStartProofLine(e) {
-    e.stopPropagation();
-    if (!e.target || typeof e.target.textContent === 'undefined') { e.preventDefault(); return; }
-    const lineItem = e.target.closest('li[data-line-number]');
-    if (!lineItem) { return; }
+// --- Generic Drag Over/Leave Highlighting ---
 
-    const { lineNumber: lineId, scopeLevel: scopeStr, isProven: isProvenStr } = lineItem.dataset;
-    const scope = parseInt(scopeStr);
-    if (!lineId || isNaN(scope)) { 
-        EventBus.emit('feedback:show', { message: "Drag Error: Missing lineId/scope.", isError: true });
-        e.preventDefault(); 
-        return; 
-    }
-    if (isProvenStr !== 'true' && lineItem.dataset.isAssumption !== 'true') {
-        EventBus.emit('feedback:show', { message: "Cannot use unproven 'Show' line as premise.", isError: true }); 
-        e.preventDefault(); 
-        return;
-    }
-
-    const formulaDiv = lineItem.querySelector('.formula');
-    const formulaText = formulaDiv.dataset.formula;
-    setDragData(e, {
-        sourceType: 'proof-line-formula', formula: formulaText.trim(),
-        lineId: lineId, scopeLevel: scope,
-        elementId: lineItem.id || (lineItem.id = `proofline-${lineId.replace('.', '-')}`)
-    });
-    formulaDiv.classList.add('dragging');
-}
-
-export function handleDropOnProofArea(e) {
-    e.preventDefault();
-    const proofList = document.getElementById('proof-lines');
-    proofList.classList.remove('drag-over-proof');
-
-    const data = getDragData(e);
-    if (!data || !data.formula) { return; }
-
-    const targetLi = e.target.closest('li[data-line-number]');
-
-    if ((data.sourceType.includes('variable') || data.sourceType.includes('predicate') || data.sourceType === 'wff-tray-formula') && !targetLi) {
-        EventBus.emit('rule:apply', { ruleName: 'RAA', droppedFormula: data.formula, droppedAst: data.ast, elementId: data.elementId, sourceType: data.sourceType });
-    } else if (data.sourceType === 'proof-line-formula') {
-        const { formula: draggedFormulaText, lineId: draggedLineId, scopeLevel: draggedScope } = data;
-        if (targetLi) {
-            const targetFormula = targetLi.querySelector('.formula').dataset.formula;
-            const targetLineId = targetLi.dataset.lineNumber;
-            const targetScope = parseInt(targetLi.dataset.scopeLevel);
-
-            const { subGoalStack } = store.getState();
-            const activeSubProof = subGoalStack.length > 0 ? subGoalStack[subGoalStack.length - 1] : null;
-
-            if (activeSubProof && activeSubProof.type === "RAA" &&
-                draggedScope === activeSubProof.scope && targetScope === activeSubProof.scope) {
-                if (isNegationOf(draggedFormulaText, targetFormula)) {
-                    EventBus.emit('proof:dischargeRAA', { subproof: activeSubProof, line1: draggedLineId, line2: targetLineId });
-                    return;
-                }
-            }
-
-            EventBus.emit('rule:apply', { ruleName: 'Reiteration', droppedFormula: draggedFormulaText, droppedLineId: draggedLineId, droppedScope: draggedScope });
-        } else {
-            EventBus.emit('rule:apply', { ruleName: 'Reiteration', droppedFormula: draggedFormulaText, droppedLineId: draggedLineId, droppedScope: draggedScope });
+export function createDragHandler(selector, className) {
+    const dragOver = (event) => {
+        event.preventDefault();
+        const target = event.target.closest(selector);
+        if (target) {
+            target.classList.add(className);
         }
-    }
-}
-
-export function handleDropOnRuleSlot(e, ruleItemElement) {
-    e.preventDefault();
-    const targetSlot = e.target.closest('.drop-slot');
-    if (!targetSlot) return;
-    targetSlot.classList.remove('drag-over');
-    const data = getDragData(e);
-    if (!data || !data.formula) {
-        EventBus.emit('feedback:show', { message: 'Drop Error!', isError: true });
-        return;
-    }
-
-    const ruleName = ruleItemElement.dataset.rule;
-    const rule = ruleSet[ruleName];
-    if (!rule) return;
-
-    const premiseIndex = parseInt(targetSlot.dataset.premiseIndex, 10);
-    const slotDefinition = rule.slots[premiseIndex];
-
-    if (slotDefinition.accepts && !slotDefinition.accepts.includes(data.sourceType)) {
-        EventBus.emit('feedback:show', { message: `Invalid drop. This slot only accepts: ${slotDefinition.accepts.join(', ')}.`, isError: true });
-        return;
-    }
-
-    // Standardize the event payload
-    const eventPayload = {
-        ruleName,
-        droppedFormula: data.formula,
-        droppedLineId: data.lineId,
-        droppedScope: data.scopeLevel,
-        elementId: data.elementId,
-        sourceType: data.sourceType,
-        targetSlot,
-        ruleItemElement
     };
 
-    console.log('[handleDropOnRuleSlot] Firing rule:apply with payload:', eventPayload);
-    EventBus.emit('rule:apply', eventPayload);
+    const dragLeave = (event) => {
+        const target = event.target.closest(selector);
+        if (target) {
+            target.classList.remove(className);
+        }
+    };
+
+    return { dragover: dragOver, dragleave: dragLeave };
 }

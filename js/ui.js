@@ -1,10 +1,11 @@
 import { store } from './store.js';
 import { EventBus } from './event-bus.js';
 import { problemSets } from './problems.js';
-import { ruleSet, handleRuleItemClick, handleRuleItemDragEnter, handleRuleItemDragLeave } from './rules.js';
-import { handleWffDragStart, handleGenericDragEnd, handleDropOnConnectiveHotspot, handleDropOnWffOutputTray, handleDropOnTrashCan, handleDropOnProofArea, handleDropOnRuleSlot, createDragHandler } from './drag-drop.js';
-import { handleSubproofToggle, setupProofLineDragging } from './proof.js';
+import { ruleSet, handleRuleItemClick, handleRuleItemDragEnter, handleRuleItemDragLeave, handleDropOnRuleSlot } from './rules.js';
+import { handleWffDragStart, handleGenericDragEnd, handleDropOnConnectiveHotspot, handleDropOnWffOutputTray, handleDropOnTrashCan, createDragHandler } from './drag-drop.js';
+import { handleSubproofToggle, setupProofLineDragging, handleDropOnProofArea } from './proof.js';
 import { startTutorial, propositionalTutorialSteps, folTutorialSteps } from './tutorial.js';
+import { LogicParser } from './parser.js';
 
 // --- DOM Element References ---
 let wffOutputTray, draggableVariables, connectiveHotspots, trashCanDropArea, proofList, proofFeedbackDiv, subGoalDisplayContainer, gameTitle, prevFeedbackBtn, nextFeedbackBtn, zoomInWffBtn, zoomOutWffBtn, helpIcon, subproofsArea, inferenceRulesArea;
@@ -53,29 +54,35 @@ function checkWinState(state) {
     const goalAst = goalFormula.ast;
     if (!goalAst) return;
 
-    const hasWon = proofLines.some(line => 
-        line.scopeLevel === 0 && 
-        line.isProven && 
-        LogicParser.areAstsEqual(line.formula.ast, goalAst)
+    const hasWon = proofLines.some(line =>
+        line.scopeLevel === 0 &&
+        line.isProven &&
+        LogicParser.areAstsEqual(line.formula, goalAst)
     );
 
     if (hasWon) {
         const { currentProblem } = store.getState();
-        const message = `Congratulations! You solved ${problemSets[currentProblem.set].name} #${currentProblem.number}.`;
-        if (proofFeedbackDiv) {
-            proofFeedbackDiv.textContent = message;
-            proofFeedbackDiv.className = 'text-center font-bold flex-grow mx-2 text-green-400';
-        }
-        const nextProblemButton = document.createElement('button');
-        nextProblemButton.textContent = 'Next Problem →';
-        nextProblemButton.className = 'bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded m-2';
-        nextProblemButton.onclick = () => {
-            EventBus.emit('problem:next');
-            nextProblemButton.remove();
-        };
-        if (proofFeedbackDiv && proofFeedbackDiv.parentElement) {
-            proofFeedbackDiv.parentElement.appendChild(nextProblemButton);
-        }
+        EventBus.emit('game:win');
+        //     const message = `Congratulations! You solved ${problemSets[currentProblem.set].name} #${currentProblem.number}.`;
+        //     if (proofFeedbackDiv) {
+        //         proofFeedbackDiv.textContent = message;
+        //         proofFeedbackDiv.className = 'text-center font-bold flex-grow mx-2 text-green-400';
+        //     }
+        //     // Check if next problem button already exists to prevent duplication
+        // ;
+        //     if (!document.querySelector('#next')) {
+        //         const nextProblemButton = document.createElement('button');
+        //         nextProblemButton.id="next";
+        //         nextProblemButton.textContent = 'Next Problem →';
+        //         nextProblemButton.className = 'bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded m-2';
+        //         nextProblemButton.onclick = () => {
+
+        //             nextProblemButton.remove();
+        //         };
+        //         if (proofFeedbackDiv && proofFeedbackDiv.parentElement) {
+        //             proofFeedbackDiv.parentElement.appendChild(nextProblemButton);
+        //         }
+        //     }
     }
 }
 
@@ -93,7 +100,7 @@ function updateConnectiveHotspots(wffConstruction) {
         const hotspot = document.querySelector(`.connective-hotspot[data-connective="${connective}"]`);
         if (hotspot) {
             hotspot.classList.add('waiting');
-            hotspot.textContent = `${wffConstruction.firstOperand.formula} ${connective} ?`;
+            hotspot.textContent = `${LogicParser.astToText(wffConstruction.firstOperand.formula)} ${connective} ?`;
         }
     }
 }
@@ -178,16 +185,17 @@ function createProofLineElement(lineData) {
         if (lineData.parentSubproofId) {
             listItem.dataset.parentSubproofId = lineData.parentSubproofId;
             if (lineData.isAssumption) {
-                 listItem.classList.add('subproof-assumption');
+                listItem.classList.add('subproof-assumption');
             }
         }
     }
 
+    const formulaText = LogicParser.astToText(lineData.formula);
     const formulaDiv = document.createElement('span');
     formulaDiv.className = 'formula';
-    formulaDiv.dataset.formula = lineData.formula;
+    formulaDiv.dataset.formula = formulaText;
     formulaDiv.draggable = true;
-    formulaDiv.appendChild(renderFormulaWithDraggableVars(lineData.formula));
+    formulaDiv.appendChild(renderFormulaWithDraggableVars(formulaText));
 
     listItem.innerHTML = `<span class="line-number">${lineData.lineNumber}</span>`;
     listItem.appendChild(formulaDiv);
@@ -204,9 +212,15 @@ export function updateProblemDisplay(premises, goalFormula, set, number) {
     const problemInfoDiv = document.getElementById('proof-problem-info');
     let problemHtml = '';
     premises.forEach((p, i) => {
-        problemHtml += `<div class="proof-header">Premise ${i + 1}: <span>${p.formula}</span></div>`;
+        // Add defensive check for undefined/premises 
+        if (p && p.formula) {
+            problemHtml += `<div class="proof-header">Premise ${i + 1}: <span>${LogicParser.astToText(p.formula)}</span></div>`;
+        }
     });
-    problemHtml += `<div class="proof-goal">Prove: <span>${goalFormula.formula}</span></div>`;
+    // Add defensive check for goalFormula
+    if (goalFormula && goalFormula.ast) {
+        problemHtml += `<div class="proof-goal">Prove: <span>${LogicParser.astToText(goalFormula.ast)}</span></div>`;
+    }
     problemInfoDiv.innerHTML = problemHtml;
 }
 
@@ -214,7 +228,7 @@ function updateSubGoalDisplay() {
     const { subGoalStack } = store.getState();
     subGoalDisplayContainer.innerHTML = '';
     if (subGoalStack.length > 0) {
-        const {scope, type, assumptionFormula, goal, forWff} = subGoalStack[subGoalStack.length - 1];
+        const { scope, type, assumptionFormula, goal, forWff } = subGoalStack[subGoalStack.length - 1];
         let goalText = goal;
         if (type === "RAA") {
             goalText = "a contradiction (ψ and ~ψ)";
@@ -241,7 +255,7 @@ function displayCurrentFeedback() {
 
     if (type === 'error') proofFeedbackDiv.classList.add('text-red-400');
     else if (type === 'warning') proofFeedbackDiv.classList.add('text-yellow-400');
-    else proofFeedbackDiv.classList.add('text-green-400');
+    else if (type === 'success') proofFeedbackDiv.classList.add('text-green-400');
 
     updateFeedbackNavButtons();
 }
@@ -280,9 +294,10 @@ function renderWffTray(wffTray) {
         const item = document.createElement('div');
         item.className = 'formula';
         item.innerHTML = '';
-        item.appendChild(renderFormulaWithDraggableVars(wffData.formula));
+        const formulaText = LogicParser.astToText(wffData.formula);
+        item.appendChild(renderFormulaWithDraggableVars(formulaText));
 
-        item.dataset.formula = wffData.formula;
+        item.dataset.formula = formulaText;
         item.id = wffData.elementId;
         item.draggable = true;
 
@@ -334,7 +349,6 @@ export function addEventListeners() {
     const proofListHandler = createDragHandler('ol#proof-lines', 'drag-over-proof');
     proofList.addEventListener('dragover', proofListHandler.dragover);
     proofList.addEventListener('dragleave', proofListHandler.dragleave);
-    proofList.addEventListener('drop', handleDropOnProofArea);
     proofList.addEventListener('click', handleSubproofToggle);
 
     addRuleEventListeners();
@@ -370,7 +384,7 @@ export function addEventListeners() {
         const newSize = Math.max(0.5, Math.min(2.5, currentSize + direction * 0.1));
         store.getState().setWffTrayFontSize(newSize);
     });
-    
+
     EventBus.on('wff:add', (wffData) => {
         store.getState().addWff(wffData);
     });
@@ -391,17 +405,21 @@ export function addEventListeners() {
             proofFeedbackDiv.textContent = message;
             proofFeedbackDiv.className = 'text-center font-bold flex-grow mx-2 text-green-400';
         }
-        const nextProblemButton = document.createElement('button');
-        nextProblemButton.textContent = 'Next Problem →';
-        nextProblemButton.className = 'bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded m-2';
-        nextProblemButton.onclick = () => {
-            EventBus.emit('problem:next');
-            nextProblemButton.remove();
-        };
-        if (proofFeedbackDiv && proofFeedbackDiv.parentElement) {
-            proofFeedbackDiv.parentElement.appendChild(nextProblemButton);
+        if (!document.querySelector("#next")) {
+            const nextProblemButton = document.createElement('button');
+            nextProblemButton.textContent = 'Next Problem →';
+            nextProblemButton.id = "next";
+            nextProblemButton.className = 'bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded m-2';
+            nextProblemButton.onclick = () => {
+                EventBus.emit('problem:next');
+                nextProblemButton.remove();
+            };
+            if (proofFeedbackDiv && proofFeedbackDiv.parentElement) {
+                proofFeedbackDiv.parentElement.appendChild(nextProblemButton);
+            }
         }
-    });
+    }
+    );
     EventBus.on('ui:resetHotspots', () => {
         store.getState().setWffConstruction({ firstOperand: null, connective: null });
     });
@@ -448,3 +466,10 @@ document.addEventListener('DOMContentLoaded', () => {
     addEventListeners();
     EventBus.emit('app:init');
 });
+
+
+// --- Main UI Initialization ---
+export function initializeUI() {
+    addEventListeners();
+    render(); // Initial render
+}

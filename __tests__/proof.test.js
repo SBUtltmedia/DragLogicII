@@ -2,6 +2,13 @@ import { addProofLine, isNegationOf } from '../js/proof.js';
 import { store } from '../js/store.js';
 import { EventBus } from '../js/event-bus.js';
 
+jest.mock('../js/store.js', () => ({
+  store: {
+    getState: jest.fn(),
+    subscribe: jest.fn(),
+  },
+}));
+
 jest.mock('../js/event-bus.js', () => ({
   EventBus: {
     on: jest.fn(),
@@ -10,36 +17,62 @@ jest.mock('../js/event-bus.js', () => ({
 }));
 
 describe('Proof Module', () => {
+  let mockState;
+
   beforeEach(() => {
-    store.setState(store.getInitialState());
+    // Reset mocks before each test
+    mockState = {
+      nextLineNumberGlobal: 1,
+      subGoalStack: [],
+      proofLines: [],
+      goalFormula: 'Q',
+      addProofLine: jest.fn(),
+      setNextLineNumber: jest.fn(),
+      updateSubGoalStack: jest.fn(),
+      setProofLines: jest.fn(),
+      setCurrentScopeLevel: jest.fn(),
+    };
+    store.getState.mockReturnValue(mockState);
     EventBus.emit.mockClear();
   });
 
   describe('addProofLine', () => {
     test('should add a new proof line to the store', () => {
-      addProofLine('P', 'Premise', 0);
-      const state = store.getState();
-      expect(state.proofLines).toHaveLength(1);
-      expect(state.proofLines[0].formula).toBe('P');
-      expect(state.nextLineNumberGlobal).toBe(2);
+      const lineData = addProofLine('P', 'Premise', 0);
+
+      expect(lineData).not.toBeNull();
+      expect(lineData.formula).toBe('P');
+      expect(lineData.justification).toBe('Premise');
+      expect(lineData.scopeLevel).toBe(0);
+      expect(lineData.isProven).toBe(true);
+      expect(mockState.addProofLine).toHaveBeenCalledWith(lineData);
+      expect(mockState.setNextLineNumber).toHaveBeenCalledWith(2);
     });
 
     test('should not add a duplicate line in the same scope', () => {
-      addProofLine('P', 'Premise', 0);
-      addProofLine('P', 'Reiteration', 0);
+      mockState.proofLines = [{ formula: 'P', scopeLevel: 0, isProven: true }];
+      mockState.nextLineNumberGlobal = 2;
+
+      const lineData = addProofLine('P', 'Reiteration', 0);
+
+      expect(lineData).toBeNull();
       expect(EventBus.emit).toHaveBeenCalledWith('feedback:show', {
         message: 'This line already exists and is proven in the current scope.',
         isError: true,
       });
-      const state = store.getState();
-      expect(state.proofLines).toHaveLength(1);
+      expect(mockState.addProofLine).not.toHaveBeenCalled();
     });
 
     test('should emit game:win when goal is reached', () => {
-      store.setState({ goalFormula: 'Q' });
-      addProofLine('Q', 'Premise', 0);
-      expect(EventBus.emit).toHaveBeenCalledWith('game:win');
-    });
+        mockState.goalFormula = 'P';
+        mockState.addProofLine.mockImplementation((line) => {
+            mockState.proofLines.push(line);
+        });
+  
+        addProofLine('P', 'Premise', 0);
+  
+        expect(EventBus.emit).toHaveBeenCalledWith('game:win');
+      });
   });
 
   describe('isNegationOf', () => {

@@ -1,196 +1,246 @@
-import { LogicParser } from './parser.js';
 import { EventBus } from './event-bus.js';
 import { store } from './store.js';
-import { addProofLine, startConditionalIntroduction, startRAA } from './proof.js';
+import { LogicParser } from './parser.js';
+import { addProofLine } from './proof.js';
 
-/**
- * A registry for all inference rules. Each rule is an object containing its properties.
- * - name: The display name of the rule.
- * - premises: The number of premises the rule takes.
- * - logicType: 'prop' for propositional, 'fol' for first-order logic.
- * - isSubproof: True if the rule initiates a subproof.
- * - slots: An array of objects defining the drop slots for the rule.
- * - apply: The function that executes the rule's logic.
- */
 export const ruleSet = {
-    // --- Subproof Rules ---
-    'CI': {
-        name: 'Conditional Introduction (→I)',
-        premises: 1,
-        logicType: 'prop',
-        isSubproof: true,
-        slots: [{
-            placeholder: 'Goal (e.g., φ → ψ)',
-            expectedPattern: 'φ → ψ',
-            accepts: ['wff-tray-formula', 'prop-variable', 'predicate']
-        }],
-        apply: ({ droppedFormula, sourceType, elementId }) => {
-            const ast = LogicParser.textToAst(droppedFormula);
-            if (ast && ast.type === 'binary' && ast.operator === '→') {
-                startConditionalIntroduction(ast);
-                if (sourceType === 'wff-tray-formula') {
-                    EventBus.emit('wff:remove', { elementId });
+    'MP': {
+        name: 'Modus Ponens (MP)',
+        premises: 2,
+        logicType: 'propositional',
+        slots: [
+            { placeholder: 'φ → ψ', expectedPattern: 'binary.→' },
+            { placeholder: 'φ', expectedPattern: 'any' }
+        ],
+        apply: (premises) => {
+            if (premises.length !== 2) return null;
+            const [p_implies_q, p] = premises.map(p => p.formula);
+
+            if (p_implies_q.type === 'binary' && p_implies_q.operator === '→') {
+                if (LogicParser.areAstsEqual(p_implies_q.left, p)) {
+                    return p_implies_q.right;
                 }
-                return true; // Indicates success
             }
-            EventBus.emit('feedback:show', { message: "→I Error: Dropped formula must be a conditional (φ → ψ).", isError: true });
-            return false;
+            return null;
+        }
+    },
+    'MT': {
+        name: 'Modus Tollens (MT)',
+        premises: 2,
+        logicType: 'propositional',
+        slots: [
+            { placeholder: 'φ → ψ', expectedPattern: 'binary.→' },
+            { placeholder: '~ψ', expectedPattern: 'negation' }
+        ],
+        apply: (premises) => {
+            if (premises.length !== 2) return null;
+            const [p_implies_q, not_q] = premises.map(p => p.formula);
+
+            if (p_implies_q.type === 'binary' && p_implies_q.operator === '→' && not_q.type === 'negation') {
+                if (LogicParser.areAstsEqual(p_implies_q.right, not_q.operand)) {
+                    return { type: 'negation', operand: p_implies_q.left };
+                }
+            }
+            return null;
+        }
+    },
+    'DS': {
+        name: 'Disjunctive Syllogism (DS)',
+        premises: 2,
+        logicType: 'propositional',
+        slots: [
+            { placeholder: 'φ ∨ ψ', expectedPattern: 'binary.∨' },
+            { placeholder: '~φ', expectedPattern: 'negation' }
+        ],
+        apply: (premises) => {
+            if (premises.length !== 2) return null;
+            const [p_or_q, not_p] = premises.map(p => p.formula);
+
+            if (p_or_q.type === 'binary' && p_or_q.operator === '∨' && not_p.type === 'negation') {
+                if (LogicParser.areAstsEqual(p_or_q.left, not_p.operand)) {
+                    return p_or_q.right;
+                }
+                if (LogicParser.areAstsEqual(p_or_q.right, not_p.operand)) {
+                    return p_or_q.left;
+                }
+            }
+            return null;
+        }
+    },
+    'Add': {
+        name: 'Addition (Add)',
+        premises: 1,
+        logicType: 'propositional',
+        slots: [
+            { placeholder: 'φ', expectedPattern: 'any' }
+        ],
+        apply: (premises, additionalData) => {
+            if (premises.length !== 1 || !additionalData || !additionalData.q) return null;
+            const p = premises[0].formula;
+            const q = LogicParser.textToAst(additionalData.q);
+            return { type: 'binary', operator: '∨', left: p, right: q };
+        }
+    },
+    'Simp': {
+        name: 'Simplification (Simp)',
+        premises: 1,
+        logicType: 'propositional',
+        slots: [
+            { placeholder: 'φ ∧ ψ', expectedPattern: 'binary.∧' }
+        ],
+        apply: (premises) => {
+            if (premises.length !== 1) return null;
+            const p_and_q = premises[0].formula;
+            if (p_and_q.type === 'binary' && p_and_q.operator === '∧') {
+                return p_and_q.left; // By default, returns p. UI could ask which one.
+            }
+            return null;
+        }
+    },
+    'Conj': {
+        name: 'Conjunction (Conj)',
+        premises: 2,
+        logicType: 'propositional',
+        slots: [
+            { placeholder: 'φ', expectedPattern: 'any' },
+            { placeholder: 'ψ', expectedPattern: 'any' }
+        ],
+        apply: (premises) => {
+            if (premises.length !== 2) return null;
+            const [p, q] = premises.map(p => p.formula);
+            return { type: 'binary', operator: '∧', left: p, right: q };
+        }
+    },
+    'CD': {
+        name: 'Constructive Dilemma (CD)',
+        premises: 3,
+        logicType: 'propositional',
+        slots: [
+            { placeholder: '(φ → ψ) ∧ (χ → ω)', expectedPattern: 'binary.∧' },
+            { placeholder: 'φ ∨ χ', expectedPattern: 'binary.∨' },
+            { placeholder: 'ψ ∨ ω', expectedPattern: 'any' } // This is the conclusion, not a premise
+        ],
+        apply: (premises) => {
+            if (premises.length !== 2) return null; // Expecting the two main premises
+            const [implications, disjunction] = premises.map(p => p.formula);
+
+            if (implications.type === 'binary' && implications.operator === '∧' &&
+                implications.left.type === 'binary' && implications.left.operator === '→' &&
+                implications.right.type === 'binary' && implications.right.operator === '→' &&
+                disjunction.type === 'binary' && disjunction.operator === '∨') {
+
+                const p = implications.left.left;
+                const q = implications.left.right;
+                const r = implications.right.left;
+                const s = implications.right.right;
+
+                if (LogicParser.areAstsEqual(disjunction.left, p) && LogicParser.areAstsEqual(disjunction.right, r)) {
+                    return { type: 'binary', operator: '∨', left: q, right: s };
+                }
+            }
+            return null;
+        }
+    },
+    // Subproof Rules
+    'CP': {
+        name: 'Conditional Proof (CP)',
+        isSubproof: true,
+        logicType: 'propositional',
+        slots: [],
+        start: (assumption) => {
+            if (!assumption) {
+                store.getState().addFeedback('CP requires an assumption.', 'error');
+                return;
+            }
+            const assumptionAst = LogicParser.textToAst(assumption);
+            store.getState().startSubproof('CP', assumptionAst);
+        },
+        end: (subproof) => {
+            if (!subproof || subproof.type !== 'CP' || subproof.lines.length === 0) return null;
+            const assumption = subproof.assumption;
+            const lastLine = subproof.lines[subproof.lines.length - 1].formula;
+            return { type: 'binary', operator: '→', left: assumption, right: lastLine };
         }
     },
     'RAA': {
         name: 'Reductio ad Absurdum (RAA)',
-        premises: 1,
-        logicType: 'prop',
         isSubproof: true,
-        slots: [{
-            placeholder: 'Goal (e.g., φ)',
-            accepts: ['wff-tray-formula', 'prop-variable', 'predicate', 'fol-variable']
-        }],
-        apply: ({ droppedFormula, sourceType, elementId }) => {
-            const ast = LogicParser.textToAst(droppedFormula);
-            if (ast) {
-                startRAA(ast);
-                if (sourceType === 'wff-tray-formula') {
-                    EventBus.emit('wff:remove', { elementId });
-                }
-                return true;
+        logicType: 'propositional',
+        slots: [],
+        start: (assumption) => {
+            if (!assumption) {
+                store.getState().addFeedback('RAA requires an assumption.', 'error');
+                return;
             }
-            EventBus.emit('feedback:show', { message: "RAA Error: Invalid formula.", isError: true });
-            return false;
-        }
-    },
-    'MTP': {
-        name: 'Modus Tollendo Ponens (MTP)',
-        premises: 2,
-        logicType: 'prop',
-        slots: [
-            { placeholder: 'Premise 1 (e.g., φ ∨ ψ)', expectedPattern: 'φ ∨ ψ', accepts: ['proof-line-formula'] },
-            { placeholder: 'Premise 2 (e.g., ~φ)', expectedPattern: '~φ', accepts: ['proof-line-formula'] }
-        ],
-        apply: (slotsData) => {
-            const [premise1, premise2] = slotsData;
-            const ast1 = LogicParser.textToAst(premise1.formula);
-            const ast2 = LogicParser.textToAst(premise2.formula);
+            const assumptionAst = LogicParser.textToAst(assumption);
+            // Typically, the assumption for RAA is the negation of what you want to prove.
+            store.getState().startSubproof('RAA', assumptionAst);
+        },
+        end: (subproof) => {
+            if (!subproof || subproof.type !== 'RAA' || subproof.lines.length < 2) return null;
 
-            if (ast1 && ast1.type === 'binary' && ast1.operator === '∨' && ast2 && ast2.type === 'negation') {
-                if (LogicParser.areAstsEqual(ast1.left, ast2.operand)) {
-                    return {
-                        resultFormula: LogicParser.astToText(ast1.right),
-                        justificationText: `MTP ${premise1.line}, ${premise2.line}`,
-                    };
-                } else if (LogicParser.areAstsEqual(ast1.right, ast2.operand)) {
-                    return {
-                        resultFormula: LogicParser.astToText(ast1.left),
-                        justificationText: `MTP ${premise1.line}, ${premise2.line}`,
-                    };
+            // Find a contradiction: a formula and its negation
+            for (let i = 0; i < subproof.lines.length; i++) {
+                for (let j = i + 1; j < subproof.lines.length; j++) {
+                    const line1 = subproof.lines[i].formula;
+                    const line2 = subproof.lines[j].formula;
+
+                    if (line2.type === 'negation' && LogicParser.areAstsEqual(line1, line2.operand)) {
+                        // Found ψ and ~ψ. The conclusion is the negation of the assumption.
+                        return { type: 'negation', operand: subproof.assumption };
+                    }
+                    if (line1.type === 'negation' && LogicParser.areAstsEqual(line2, line1.operand)) {
+                        // Found ~ψ and ψ
+                        return { type: 'negation', operand: subproof.assumption };
+                    }
                 }
             }
-            EventBus.emit('feedback:show', { message: "MTP Error: The premises must be of the form (φ ∨ ψ) and ~φ (or ~ψ).", isError: true });
-            return null;
+            return null; // No contradiction found
         }
     },
-    'BC': {
-        name: 'Biconditional-Conditional (BC)',
-        premises: 1,
-        logicType: 'prop',
-        slots: [
-            { placeholder: 'Premise (e.g., φ ↔ ψ)', expectedPattern: 'φ ↔ ψ', accepts: ['proof-line-formula'] }
-        ],
-        apply: (slotsData) => {
-            const [premise] = slotsData;
-            const ast = LogicParser.textToAst(premise.formula);
 
-            if (ast && ast.type === 'binary' && ast.operator === '↔') {
-                const resultAst = { type: 'binary', operator: '→', left: ast.left, right: ast.right };
-                return {
-                    resultFormula: LogicParser.astToText(resultAst),
-                    justificationText: `BC ${premise.line}`,
-                };
-            }
-            EventBus.emit('feedback:show', { message: "BC Error: The premise must be a biconditional (φ ↔ ψ).", isError: true });
-            return null;
-        }
-    },
-    'CB': {
-        name: 'Conditional-Biconditional (CB)',
-        premises: 2,
-        logicType: 'prop',
-        slots: [
-            { placeholder: 'Premise 1 (e.g., φ → ψ)', expectedPattern: 'φ → ψ', accepts: ['proof-line-formula'] },
-            { placeholder: 'Premise 2 (e.g., ψ → φ)', expectedPattern: 'φ → ψ', accepts: ['proof-line-formula'] }
-        ],
-        apply: (slotsData) => {
-            const [premise1, premise2] = slotsData;
-            const ast1 = LogicParser.textToAst(premise1.formula);
-            const ast2 = LogicParser.textToAst(premise2.formula);
-
-            if (ast1 && ast1.type === 'binary' && ast1.operator === '→' &&
-                ast2 && ast2.type === 'binary' && ast2.operator === '→' &&
-                LogicParser.areAstsEqual(ast1.left, ast2.right) &&
-                LogicParser.areAstsEqual(ast1.right, ast2.left)) {
-                const resultAst = { type: 'binary', operator: '↔', left: ast1.left, right: ast1.right };
-                return {
-                    resultFormula: LogicParser.astToText(resultAst),
-                    justificationText: `CB ${premise1.line}, ${premise2.line}`,
-                };
-            }
-            EventBus.emit('feedback:show', { message: "CB Error: The premises must be of the form (φ → ψ) and (ψ → φ).", isError: true });
-            return null;
-        }
-    },
+    // First-Order Logic Rules
     'UI': {
         name: 'Universal Instantiation (UI)',
         premises: 1,
         logicType: 'fol',
         slots: [
-            { placeholder: 'Premise (e.g., ∀xφx)', expectedPattern: '∀xφx', accepts: ['proof-line-formula'] }
+            { placeholder: '∀x φ(x)', expectedPattern: 'quantifier.∀' }
         ],
-        apply: (slotsData) => {
-            const [premise] = slotsData;
-            const ast = LogicParser.textToAst(premise.formula);
+        apply: (premises, additionalData) => {
+            if (premises.length !== 1 || !additionalData || !additionalData.instance) return null;
+            const universal = premises[0].formula;
+            if (universal.type !== 'quantifier' || universal.quantifier !== '∀') return null;
 
-            if (ast && ast.type === 'quantifier' && ast.quantifier === '∀') {
-                const term = prompt(`Instantiate "${ast.variable}" to what term?`);
-                if (!term) {
-                    EventBus.emit('feedback:show', { message: "UI Error: You must provide a term to instantiate.", isError: true });
-                    return null;
-                }
+            // `instance` should be a variable or constant to replace the quantified variable.
+            // For simplicity, we'll assume it's a simple variable name string like 'y' or a constant 'a'.
+            const variableToReplace = universal.variable;
+            const instanceAst = LogicParser.textToAst(additionalData.instance);
 
-                function replaceInAst(ast, fromVar, toTerm) {
-                    if (!ast) return null;
-                    if (ast.type === 'variable' && ast.value === fromVar) {
-                        return toTerm;
-                    }
-                    if (ast.type === 'predicate') {
-                        const newArgs = ast.args.map(arg => replaceInAst(arg, fromVar, toTerm));
-                        return { ...ast, args: newArgs };
-                    }
-                    if (ast.type === 'negation') {
-                         return { ...ast, operand: replaceInAst(ast.operand, fromVar, toTerm) };
-                    }
-                    if (ast.type === 'binary') {
-                        return { ...ast, left: replaceInAst(ast.left, fromVar, toTerm), right: replaceInAst(ast.right, fromVar, toTerm) };
-                    }
-                     if (ast.type === 'quantifier') {
-                         if (ast.variable === fromVar) return ast; // Variable is bound, do not replace.
-                         return { ...ast, formula: replaceInAst(ast.formula, fromVar, toTerm) };
-                    }
-                    return ast;
-                }
+            return LogicParser.substitute(universal.formula, variableToReplace, instanceAst);
+        }
+    },
+    'EG': {
+        name: 'Existential Generalization (EG)',
+        premises: 1,
+        logicType: 'fol',
+        slots: [
+            { placeholder: 'φ(a)', expectedPattern: 'any' }
+        ],
+        apply: (premises, additionalData) => {
+            if (premises.length !== 1 || !additionalData || !additionalData.variable) return null;
+            const specific_instance = premises[0].formula;
+            const variable = additionalData.variable; // e.g., 'x'
 
-                const termAst = LogicParser.textToAst(term);
-                if (!termAst) {
-                    EventBus.emit('feedback:show', { message: `UI Error: Invalid term "${term}".`, isError: true });
-                    return null;
-                }
-
-                const resultAst = replaceInAst(ast.formula, ast.variable, termAst);
-                return {
-                    resultFormula: LogicParser.astToText(resultAst),
-                    justificationText: `UI ${premise.line}`,
-                };
+            // This is tricky. We need to find the constant 'a' in F(a) and replace it with x.
+            // This requires a more complex substitution logic or a UI to select the term to generalize.
+            // Simple case: assume the formula is a predicate with one argument F(a) -> ∃x F(x)
+            if (specific_instance.type === 'predicate' && specific_instance.args.length > 0) {
+                // This is a simplification. A real implementation needs to handle complex formulas.
+                const termToGeneralize = specific_instance.args[0]; // e.g., the 'a' AST
+                const generalizedFormula = LogicParser.substitute(specific_instance, termToGeneralize.value, { type: 'variable', value: variable });
+                return { type: 'quantifier', quantifier: '∃', variable: variable, formula: generalizedFormula };
             }
-            EventBus.emit('feedback:show', { message: "UI Error: The premise must be a universally quantified formula (∀xφx).", isError: true });
             return null;
         }
     },
@@ -198,389 +248,204 @@ export const ruleSet = {
         name: 'Existential Instantiation (EI)',
         premises: 1,
         logicType: 'fol',
+        slots: [
+            { placeholder: '∃x φ(x)', expectedPattern: 'quantifier.∃' }
+        ],
+        // EI is a subproof rule in many systems, but can be a direct rule with restrictions.
+        // Here, we'll treat it as a direct rule that introduces a *new* constant.
+        apply: (premises, additionalData) => {
+            if (premises.length !== 1 || !additionalData || !additionalData.newConstant) return null;
+            const existential = premises[0].formula;
+            if (existential.type !== 'quantifier' || existential.quantifier !== '∃') return null;
+
+            // IMPORTANT: `newConstant` must be a constant that has not appeared in the proof before.
+            // This check should be performed by the calling logic (e.g., in the store).
+            const variableToReplace = existential.variable;
+            const constantAst = { type: 'variable', value: additionalData.newConstant }; // Treat constants as variables for substitution
+
+            return LogicParser.substitute(existential.formula, variableToReplace, constantAst);
+        }
+    },
+    'EE': {
+        name: 'Existential Elimination (EE)',
         isSubproof: true,
-        slots: [
-            { placeholder: 'Premise (e.g., ∃xφx)', expectedPattern: '∃xφx', accepts: ['proof-line-formula'] }
-        ],
-        apply: (slotsData) => {
-            const [premise] = slotsData;
-            const ast = LogicParser.textToAst(premise.formula);
-
-            if (ast && ast.type === 'quantifier' && ast.quantifier === '∃') {
-                const newVar = prompt(`Instantiate "${ast.variable}" with what new variable?`);
-                if (!newVar || !/^[a-w]/.test(newVar)) {
-                    EventBus.emit('feedback:show', { message: "EI Error: You must provide a new variable (a-w).", isError: true });
-                    return null;
-                }
-
-                function replaceInAst(ast, fromVar, toVar) {
-                    if (!ast) return null;
-                    if (ast.type === 'variable' && ast.value === fromVar) {
-                        return { type: 'variable', value: toVar };
-                    }
-                    if (ast.type === 'predicate') {
-                        const newArgs = ast.args.map(arg => replaceInAst(arg, fromVar, toVar));
-                        return { ...ast, args: newArgs };
-                    }
-                    if (ast.type === 'negation') {
-                         return { ...ast, operand: replaceInAst(ast.operand, fromVar, toVar) };
-                    }
-                    if (ast.type === 'binary') {
-                        return { ...ast, left: replaceInAst(ast.left, fromVar, toVar), right: replaceInAst(ast.right, fromVar, toTerm) };
-                    }
-                     if (ast.type === 'quantifier') {
-                         if (ast.variable === fromVar) return ast; // Variable is bound, do not replace.
-                         return { ...ast, formula: replaceInAst(ast.formula, fromVar, toVar) };
-                    }
-                    return ast;
-                }
-
-                const assumptionAst = replaceInAst(ast.formula, ast.variable, newVar);
-                const assumptionFormula = LogicParser.astToText(assumptionAst);
-
-                startExistentialInstantiation(premise.formula, assumptionFormula, newVar);
-                return true;
-            }
-            EventBus.emit('feedback:show', { message: "EI Error: The premise must be an existentially quantified formula (∃xφx).", isError: true });
-            return false;
-        }
-    },
-
-    // --- Standard Inference Rules ---
-    'MP': {
-        name: 'Modus Ponens (MP / →E)',
-        premises: 2,
-        logicType: 'prop',
-        slots: [
-            { placeholder: 'Premise 1 (e.g., φ → ψ)', expectedPattern: 'φ → ψ', accepts: ['proof-line-formula'] },
-            { placeholder: 'Premise 2 (e.g., φ)', expectedPattern: 'φ', accepts: ['proof-line-formula'] }
-        ],
-        apply: (slotsData) => {
-            const [premise1, premise2] = slotsData;
-            const ast1 = LogicParser.textToAst(premise1.formula);
-            const ast2 = LogicParser.textToAst(premise2.formula);
-
-            // Case 1: Premise 1 is the conditional
-            if (ast1 && ast1.type === 'binary' && ast1.operator === '→' && ast2 && LogicParser.areAstsEqual(ast1.left, ast2)) {
-                return {
-                    resultFormula: LogicParser.astToText(ast1.right),
-                    justificationText: `MP ${premise1.line}, ${premise2.line}`,
-                    consumedWffIds: []
-                };
-            }
-
-            // Case 2: Premise 2 is the conditional
-            if (ast2 && ast2.type === 'binary' && ast2.operator === '→' && ast1 && LogicParser.areAstsEqual(ast2.left, ast1)) {
-                return {
-                    resultFormula: LogicParser.astToText(ast2.right),
-                    justificationText: `MP ${premise1.line}, ${premise2.line}`,
-                    consumedWffIds: []
-                };
-            }
-
-            EventBus.emit('feedback:show', { message: "MP Error: The premises must be of the form φ → ψ and φ.", isError: true });
-            return null;
-        }
-    },
-    'MT': {
-        name: 'Modus Tollens (MT)',
-        premises: 2,
-        logicType: 'prop',
-        slots: [
-            { placeholder: 'Premise 1 (e.g., φ → ψ)', expectedPattern: 'φ → ψ', accepts: ['proof-line-formula'] },
-            { placeholder: 'Premise 2 (e.g., ~ψ)', expectedPattern: '~ψ', accepts: ['proof-line-formula'] }
-        ],
-        apply: (slotsData) => {
-            const [premise1, premise2] = slotsData;
-            const ast1 = LogicParser.textToAst(premise1.formula);
-            const ast2 = LogicParser.textToAst(premise2.formula);
-
-            if (ast1 && ast2 && ast2.type === 'negation' && LogicParser.areAstsEqual(ast1.right, ast2.operand)) {
-                const resultAst = { type: 'negation', operand: ast1.left };
-                return {
-                    resultFormula: LogicParser.astToText(resultAst),
-                    justificationText: `MT ${premise1.line}, ${premise2.line}`,
-                    consumedWffIds: []
-                };
-            }
-            EventBus.emit('feedback:show', { message: "MT Error: The second premise must be the negation of the first's consequent.", isError: true });
-            return null;
-        }
-    },
-    'AndI': {
-        name: 'And Introduction (∧I)',
-        premises: 2,
-        logicType: 'prop',
-        slots: [
-            { placeholder: 'Premise 1 (e.g., φ)', accepts: ['proof-line-formula'] },
-            { placeholder: 'Premise 2 (e.g., ψ)', accepts: ['proof-line-formula'] }
-        ],
-        apply: (slotsData) => {
-            const [premiseA, premiseB] = slotsData;
-            const astA = LogicParser.textToAst(premiseA.formula);
-            const astB = LogicParser.textToAst(premiseB.formula);
-            if (!astA || !astB) {
-                EventBus.emit('feedback:show', { message: "One of the formulas for ∧I is invalid.", isError: true });
-                return null;
-            }
-            const resultAst = { type: 'binary', operator: '∧', left: astA, right: astB };
-            return {
-                resultFormula: LogicParser.astToText(resultAst),
-                justificationText: `∧I ${premiseA.line}, ${premiseB.line}`,
-                consumedWffIds: []
-            };
-        }
-    },
-    'AndE': {
-        name: 'And Elimination (∧E)',
-        premises: 1,
-        logicType: 'prop',
-        slots: [{ placeholder: 'Premise (e.g., φ ∧ ψ)', expectedPattern: 'φ ∧ ψ', accepts: ['proof-line-formula'] }],
-        apply: (slotsData) => {
-            const conjunctionPremise = slotsData[0];
-            const ast = LogicParser.textToAst(conjunctionPremise.formula);
-            if (!ast || ast.type !== 'binary' || ast.operator !== '∧') {
-                EventBus.emit('feedback:show', { message: "∧E Error: Premise must be a conjunction (φ ∧ ψ).", isError: true });
-                return null;
-            }
-            const leftPart = LogicParser.astToText(ast.left);
-            const rightPart = LogicParser.astToText(ast.right);
-            const choice = prompt(`From "${conjunctionPremise.formula}", extract:\n1. "${leftPart}" (Left)\n2. "${rightPart}" (Right)`, "1");
-
-            let resultFormula = null;
-            if (choice === "1") resultFormula = leftPart;
-            else if (choice === "2") resultFormula = rightPart;
-            else {
-                EventBus.emit('feedback:show', { message: "∧E: No valid choice made.", isError: true });
-                return null;
-            }
-            return {
-                resultFormula: resultFormula,
-                justificationText: `∧E ${conjunctionPremise.line}`,
-                consumedWffIds: []
-            };
-        }
-    },
-    'Add': {
-        name: 'Addition (∨I)',
-        premises: 2,
-        logicType: 'prop',
-        slots: [
-            { placeholder: 'Existing Line (e.g., φ)', accepts: ['proof-line-formula'] },
-            { placeholder: 'WFF to Add (e.g., ψ)', accepts: ['wff-tray-formula', 'prop-variable', 'predicate', 'fol-variable'] }
-        ],
-        apply: (slotsData) => {
-            const [premise1, premise2] = slotsData;
-            const ast1 = LogicParser.textToAst(premise1.formula);
-            const ast2 = LogicParser.textToAst(premise2.formula);
-            if (!ast1 || !ast2) {
-                EventBus.emit('feedback:show', { message: "Addition Error: Invalid formula.", isError: true });
-                return null;
-            }
-            const resultAst = { type: 'binary', operator: '∨', left: ast1, right: ast2 };
-            return {
-                resultFormula: LogicParser.astToText(resultAst),
-                justificationText: `Add ${premise1.line}`,
-                consumedWffIds: premise2.source === 'wff-tray-formula' ? [premise2.elementId] : []
-            };
-        }
-    },
-    'DN': {
-        name: 'Double Negation (DN)',
-        premises: 1,
-        logicType: 'prop',
-        slots: [{ placeholder: 'Premise (e.g., ~~φ or φ)', expectedPattern: '~~φ or φ', accepts: ['proof-line-formula'] }],
-        apply: (slotsData) => {
-            const premise = slotsData[0];
-            const ast = LogicParser.textToAst(premise.formula);
-            if (!ast) {
-                EventBus.emit('feedback:show', { message: "Invalid formula for DN.", isError: true });
-                return null;
-            }
-            let resultAst;
-            if (ast.type === 'negation' && ast.operand.type === 'negation') {
-                resultAst = ast.operand.operand; // ~~A -> A
-            } else {
-                resultAst = { type: 'negation', operand: { type: 'negation', operand: ast } }; // A -> ~~
-            }
-            return {
-                resultFormula: LogicParser.astToText(resultAst),
-                justificationText: `DN ${premise.line}`,
-                consumedWffIds: []
-            };
-        }
-    },
-    'Reiteration': {
-        name: 'Reiteration (Re)',
-        premises: 1,
-        logicType: 'prop',
-        slots: [{ placeholder: 'Line to Reiterate', accepts: ['proof-line-formula'] }],
-        apply: ({ droppedFormula, droppedLineId }) => {
-            const { currentScopeLevel } = store.getState();
-            if (addProofLine(droppedFormula, `Re ${droppedLineId}`, currentScopeLevel)) {
-                return true;
-            }
-            return false;
-        }
-    },
-    // --- FOL Rules ---
-    'EI': {
-        name: 'Existential Introduction (∃I)',
-        premises: 2,
         logicType: 'fol',
         slots: [
-            { placeholder: 'Formula (e.g., F(a))', accepts: ['proof-line-formula'] },
-            { placeholder: 'Variable to Generalize (e.g., x)', accepts: ['fol-variable'] }
+            { placeholder: '∃x φ(x)', expectedPattern: 'quantifier.∃' },
+            { placeholder: 'ψ', expectedPattern: 'any' } // The conclusion of the subproof
         ],
-        apply: () => { EventBus.emit('feedback:show', { message: 'EI is not fully implemented yet.', isError: true }); return false; }
+        start: (premises) => {
+            if (premises.length !== 1) return;
+            const existentialFormula = premises[0].formula;
+            if (existentialFormula.type !== 'quantifier' || existentialFormula.quantifier !== '∃') {
+                store.getState().addFeedback('EE requires an existential formula.', 'error');
+                return;
+            }
+
+            const variable = existentialFormula.variable;
+            const formula = existentialFormula.formula;
+            const constant = 'a'; // This should be a fresh constant not appearing in the proof
+            const assumption = LogicParser.substitute(formula, variable, { type: 'variable', value: constant });
+
+            store.getState().startSubproof('EE', assumption, { existentialFormula });
+        },
+        end: (subproof) => {
+            if (!subproof || subproof.type !== 'EE' || subproof.lines.length === 0) return null;
+            const conclusion = subproof.lines[subproof.lines.length - 1].formula;
+            // Here we should check that the constant 'a' does not appear in the conclusion
+            return conclusion;
+        }
+    },
+    'UG': {
+        name: 'Universal Generalization (UG)',
+        premises: 1,
+        logicType: 'fol',
+        slots: [
+            { placeholder: 'φ(a)', expectedPattern: 'any' } // where 'a' is arbitrary
+        ],
+        // UG is also complex. It requires that F(a) has been derived and 'a' is an arbitrary constant.
+        // This is often handled within a subproof structure.
+        apply: (premises, additionalData) => {
+            if (premises.length !== 1 || !additionalData || !additionalData.variable) return null;
+            const specific_instance = premises[0].formula;
+            const variable = additionalData.variable; // e.g., 'x'
+
+            // The calling logic must verify that the constant being generalized is arbitrary.
+            // Simple case: F(a) -> ∀x F(x)
+            if (specific_instance.type === 'predicate') {
+                const termToGeneralize = specific_instance.args[0]; // This is a huge simplification
+                const generalizedFormula = LogicParser.substitute(specific_instance, termToGeneralize.value, { type: 'variable', value: variable });
+                return { type: 'quantifier', quantifier: '∀', variable: variable, formula: generalizedFormula };
+            }
+            return null;
+        }
     }
 };
 
+let activeRule = null;
+let collectedPremises = [];
 
-// --- Event Handlers ---
+export function handleRuleItemClick(event) {
+    const ruleElement = event.currentTarget;
+    const ruleKey = ruleElement.dataset.rule;
+    const rule = ruleSet[ruleKey];
 
-EventBus.on('rule:apply', handleRuleApply);
+    if (activeRule === ruleKey) {
+        // Deactivate rule
+        activeRule = null;
+        collectedPremises = [];
+        EventBus.emit('rules:deactivate');
+        return;
+    }
+
+    activeRule = ruleKey;
+    collectedPremises = [];
+    EventBus.emit('rules:activate', ruleElement);
+
+    if (rule.premises === 0) {
+        applyActiveRule();
+    }
+}
+
+export function handleDropOnRuleSlot(event, ruleElement) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const ruleKey = ruleElement.dataset.rule;
+    if (activeRule !== ruleKey) {
+        // If a different rule is active, switch to this one
+        handleRuleItemClick({ currentTarget: ruleElement });
+    }
+
+    const slot = event.target.closest('.drop-slot');
+    if (!slot) return;
+
+    const jsonData = event.dataTransfer.getData('application/json');
+    if (!jsonData) return;
+    const data = JSON.parse(jsonData);
+    const premiseIndex = parseInt(slot.dataset.premiseIndex, 10);
+
+    // Validate premise pattern if specified
+    const expectedPattern = slot.dataset.expectedPattern;
+    if (expectedPattern && expectedPattern !== 'any') {
+        const formulaAst = LogicParser.textToAst(data.formula);
+        const [type, operator] = expectedPattern.split('.');
+        let match = formulaAst.type === type;
+        if (operator) {
+            match = match && formulaAst.operator === operator;
+        }
+        if (!match) {
+            store.getState().addFeedback(`Invalid premise type for this slot. Expected ${expectedPattern}.`, 'error');
+            return;
+        }
+    }
+
+    collectedPremises[premiseIndex] = data;
+    EventBus.emit('rules:fillSlot', { slot, data });
+
+    const rule = ruleSet[activeRule];
+    if (collectedPremises.filter(p => p).length === rule.premises) {
+        applyActiveRule();
+    }
+}
+
+function applyActiveRule() {
+    if (!activeRule) return;
+
+    const rule = ruleSet[activeRule];
+    const premisesData = collectedPremises.map((p, index) => ({
+        ...p,
+        formula: LogicParser.textToAst(p.formula), // Ensure formula is AST
+        line: p.line || null,
+        source: p.source || null
+    }));
+
+    let additionalData = {};
+    // Handle rules that need extra input, like 'Add'
+    if (activeRule === 'Add') {
+        const q = prompt('Enter the formula to add (e.g., Q):');
+        if (!q) {
+            resetRuleState();
+            return;
+        }
+        additionalData.q = q;
+    }
+
+    const resultAst = rule.apply(premisesData, additionalData);
+
+    if (resultAst) {
+        const justification = `${activeRule} ${premisesData.map(p => p.line).join(', ')}`;
+        addProofLine(LogicParser.astToText(resultAst), justification, store.getState().currentScopeLevel);
+    } else {
+        store.getState().addFeedback(`Rule ${activeRule} could not be applied.`, 'error');
+    }
+
+    resetRuleState();
+}
+
+function resetRuleState() {
+    activeRule = null;
+    collectedPremises = [];
+    EventBus.emit('rules:deactivate');
+    // Clear visual slots
+    document.querySelectorAll('.rule-item .drop-slot').forEach(slot => {
+        EventBus.emit('rules:clearSlot', slot);
+    });
+}
+
+// --- Drag and Drop Highlighting ---
 
 export function handleRuleItemDragEnter(event) {
+    event.preventDefault();
     const item = event.currentTarget;
+    item.classList.add('drag-over-rule');
     item.dataset.hoverTimer = setTimeout(() => {
-        EventBus.emit('rules:activate', item);
+        item.classList.add('active');
     }, 500);
 }
 
 export function handleRuleItemDragLeave(event) {
     const item = event.currentTarget;
+    item.classList.remove('drag-over-rule');
     clearTimeout(item.dataset.hoverTimer);
-}
-
-export function handleRuleItemClick(event) {
-    if (event.target && event.target.closest('.drop-slot')) {
-        return;
-    }
-    const clickedItem = event.currentTarget;
-    const isAlreadyActive = clickedItem.classList.contains('active');
-    EventBus.emit('rules:deactivate'); // Deactivate all
-    if (!isAlreadyActive) {
-        EventBus.emit('rules:activate', clickedItem);
-    }
-}
-
-function getRuleSlotData(ruleItemElement) {
-    const slots = ruleItemElement.querySelectorAll('.drop-slot');
-    return Array.from(slots).map(slot => ({
-        formula: slot.dataset.formula,
-        line: slot.dataset.line,
-        source: slot.dataset.source,
-        elementId: slot.dataset.elementId
-    }));
-}
-
-function validateAndFillSlot(targetSlot, data) {
-    const { droppedFormula, droppedLineId, droppedScope, elementId, sourceType } = data;
-    const { currentScopeLevel } = store.getState();
-
-    if (sourceType === 'proof-line-formula' && droppedScope > currentScopeLevel) {
-        EventBus.emit('feedback:show', { message: "Rule Error: Cannot use line from inner, closed subproof.", isError: true });
-        return false;
-    }
-
-    try {
-        const expectedPattern = targetSlot.dataset.expectedPattern;
-        if (expectedPattern) {
-            const droppedAst = LogicParser.textToAst(droppedFormula);
-            let isValid = false;
-            let errorMsg = '';
-            switch (expectedPattern) {
-                case 'φ → ψ':
-                    if (droppedAst.type === 'binary' && droppedAst.operator === '→') isValid = true;
-                    else errorMsg = "Invalid drop. Expected a conditional (e.g., A → B).";
-                    break;
-                case '~ψ':
-                    if (droppedAst.type === 'negation') isValid = true;
-                    else errorMsg = "Invalid drop. Expected a negation (e.g., ~A).";
-                    break;
-                case 'φ ∧ ψ':
-                    if (droppedAst.type === 'binary' && droppedAst.operator === '∧') isValid = true;
-                    else errorMsg = "Invalid drop. Expected a conjunction (e.g., A ∧ B).";
-                    break;
-                case 'φ': // Generic formula
-                     isValid = true;
-                     break;
-                default:
-                    isValid = true; // No specific pattern to check
-            }
-            if (!isValid) {
-                EventBus.emit('feedback:show', { message: errorMsg, isError: true });
-                return false;
-            }
-        }
-    } catch (e) {
-        EventBus.emit('feedback:show', { message: e.message, isError: true });
-        return false;
-    }
-
-    // --- FIX: Directly update the dataset before emitting the event ---
-    targetSlot.dataset.source = sourceType;
-    targetSlot.dataset.formula = droppedFormula;
-    if (droppedLineId) {
-        targetSlot.dataset.line = droppedLineId;
-    } else {
-        delete targetSlot.dataset.line;
-    }
-    if (elementId) {
-        targetSlot.dataset.elementId = elementId;
-    }
-
-    // Emit event for UI updates (e.g., changing style)
-    EventBus.emit('rules:fillSlot', {
-        slot: targetSlot,
-        data: { formula: droppedFormula, lineId: droppedLineId }
-    });
-
-    return true;
-}
-
-
-function handleRuleApply(data) {
-    const { ruleName, droppedFormula, droppedLineId, droppedScope, elementId, sourceType, targetSlot, ruleItemElement } = data;
-    const rule = ruleSet[ruleName];
-    if (!rule) return;
-
-    // --- Handle Subproof Rules ---
-    if (rule.isSubproof) {
-        if (rule.apply({ droppedFormula, sourceType, elementId })) {
-            // If the rule was applied via a rule item, clear its slots.
-            if (ruleItemElement) {
-                EventBus.emit('rules:clearSlots', ruleItemElement);
-                EventBus.emit('rules:deactivate');
-            }
-        } else {
-            // If the application failed and it was via a slot, clear the slot.
-            if (targetSlot) {
-                EventBus.emit('rules:clearSlot', targetSlot);
-            }
-        }
-        return;
-    }
-
-    // --- Handle Standard Rules ---
-    if (!validateAndFillSlot(targetSlot, data)) {
-        return;
-    }
-
-    const slotsData = getRuleSlotData(ruleItemElement);
-    const filledSlots = slotsData.filter(s => s.formula);
-
-    if (filledSlots.length === rule.premises) {
-        const result = rule.apply(slotsData);
-        if (result && result.resultFormula) {
-            const { currentScopeLevel } = store.getState();
-            addProofLine(result.resultFormula, result.justificationText, currentScopeLevel);
-            if (result.consumedWffIds && result.consumedWffIds.length > 0) {
-                result.consumedWffIds.forEach(id => EventBus.emit('wff:remove', { elementId: id }));
-            }
-            EventBus.emit('rules:clearSlots', ruleItemElement);
-            EventBus.emit('rules:deactivate');
-        }
-    }
 }

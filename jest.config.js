@@ -1,5 +1,5 @@
 export default {
-  testEnvironment: 'jsdom',
+  testEnvironment: 'node',
   transform: {
     '^.+\.(js|jsx)$': ['babel-jest']
   },
