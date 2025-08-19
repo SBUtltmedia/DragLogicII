@@ -1,6 +1,5 @@
 import { EventBus } from './event-bus.js';
 import { store } from './store.js';
-import { handleRuleItemClick } from './rules.js';
 
 // --- Drag Data Utilities ---
 export function setDragData(event, dataObject) {
@@ -98,4 +97,32 @@ export function createDragHandler(selector, className) {
     };
 
     return { dragover: dragOver, dragleave: dragLeave };
+}
+
+export function handleDragStartProofLine(e) {
+    e.stopPropagation();
+    const lineItem = e.target.closest('li[data-line-number]');
+    if (!lineItem) return;
+
+    const { lineNumber: lineId, scopeLevel: scopeStr, isProven: isProvenStr, isAssumption: isAssumptionStr } = lineItem.dataset;
+    const scope = parseInt(scopeStr);
+    if (!lineId || isNaN(scope)) {
+        EventBus.emit('feedback:show', { message: "Drag Error: Missing lineId/scope.", isError: true });
+        e.preventDefault();
+        return;
+    }
+    if (isProvenStr !== 'true' && isAssumptionStr !== 'true') {
+        EventBus.emit('feedback:show', { message: "Cannot use unproven 'Show' line as premise.", isError: true });
+        e.preventDefault();
+        return;
+    }
+
+    const formulaDiv = lineItem.querySelector('.formula');
+    const formulaText = formulaDiv.dataset.formula;
+    setDragData(e, {
+        sourceType: 'proof-line-formula', formula: formulaText.trim(),
+        lineId: lineId, scopeLevel: scope,
+        elementId: lineItem.id || (lineItem.id = `proofline-${lineId.replace('.', '-')}`)
+    });
+    formulaDiv.classList.add('dragging');
 }

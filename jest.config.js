@@ -1,5 +1,5 @@
 export default {
-  testEnvironment: 'node',
+  testEnvironment: 'jsdom',
   transform: {
     '^.+\.(js|jsx)$': ['babel-jest']
   },
@@ -17,6 +17,6 @@ export default {
   },
   testPathIgnorePatterns: [
     '<rootDir>/__tests__/mocks__/store.js',
-    '<rootDir>/__tests__/setup.js'
-  ]
+  ],
+  setupFilesAfterEnv: ['<rootDir>/__tests__/setup.js']
 };

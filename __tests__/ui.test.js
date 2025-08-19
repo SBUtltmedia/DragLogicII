@@ -15,18 +15,18 @@ describe('UI Module', () => {
 
         beforeEach(() => {
             // Set up our document body
-            document.body.innerHTML = `<h1 id="game-title"></h1>
-                <div id="proof-problem-info"></div>`;
+            document.body.innerHTML = '<h1 id="game-title"></h1>' +
+                '<div id="proof-problem-info"></div>';
             problemInfoDiv = document.getElementById('proof-problem-info');
             gameTitle = document.getElementById('game-title');
         });
 
         test('should correctly display the problem premises and goal', () => {
             const premises = [
-                { formula: 'P → Q' },
-                { formula: 'P' }
+                { formula: {type: 'binary', operator: '→', left: {type: 'atomic', value: 'P'}, right: {type: 'atomic', value: 'Q'}} },
+                { formula: {type: 'atomic', value: 'P'} }
             ];
-            const goalFormula = { formula: 'Q' };
+            const goalFormula = { ast: {type: 'atomic', value: 'Q'} };
             const set = 1;
             const number = 1;
 
@@ -40,7 +40,7 @@ describe('UI Module', () => {
 
         test('should handle empty premises', () => {
             const premises = [];
-            const goalFormula = { formula: 'P ∨ ~P' };
+            const goalFormula = { ast: {type: 'binary', operator: '∨', left: {type: 'atomic', value: 'P'}, right: {type: 'negation', operand: {type: 'atomic', value: 'P'}}} };
             const set = 1;
             const number = 2;
 

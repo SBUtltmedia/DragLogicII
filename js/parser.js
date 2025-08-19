@@ -93,6 +93,15 @@ export const LogicParser = (() => {
     }
 
     function fromAst(ast) {
+        const result = fromAstRecursive(ast);
+        // Remove outermost parentheses if they exist
+        if (result.startsWith('(') && result.endsWith(')')) {
+            return result.slice(1, -1);
+        }
+        return result;
+    }
+
+    function fromAstRecursive(ast) {
          if (!ast) return '';
          switch (ast.type) {
             case 'atomic':
@@ -100,25 +109,25 @@ export const LogicParser = (() => {
                 return ast.value;
             case 'predicate':
                 if (ast.args.length === 0) return ast.name;
-                return `${ast.name}(${ast.args.map(fromAst).join(', ')})`;
+                return `${ast.name}(${ast.args.map(fromAstRecursive).join(', ')})`;
             case 'negation':
-                const operandStr = fromAst(ast.operand);
+                const operandStr = fromAstRecursive(ast.operand);
                 if (ast.operand.type === 'atomic' || ast.operand.type === 'predicate') {
                      return `~${operandStr}`;
                 }
                 return `~(${operandStr})`;
             case 'binary':
-                const left = fromAst(ast.left);
-                const right = fromAst(ast.right);
+                const left = fromAstRecursive(ast.left);
+                const right = fromAstRecursive(ast.right);
                 return `(${left} ${ast.operator} ${right})`;
              case 'quantifier':
-                const formulaStr = fromAst(ast.formula);
+                const formulaStr = fromAstRecursive(ast.formula);
                 if (ast.formula.type === 'binary') {
                     return `${ast.quantifier}${ast.variable}(${formulaStr})`;
                 }
                 return `${ast.quantifier}${ast.variable}${formulaStr}`;
             case 'description':
-                const descFormulaStr = fromAst(ast.formula);
+                const descFormulaStr = fromAstRecursive(ast.formula);
                 if (ast.formula.type === 'binary') {
                     return `${ast.operator}${ast.variable}(${descFormulaStr})`;
                 }

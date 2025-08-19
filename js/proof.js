@@ -1,7 +1,7 @@
 import { EventBus } from './event-bus.js';
 import { store } from './store.js';
 import { LogicParser } from './parser.js';
-import { setDragData, handleGenericDragEnd } from './drag-drop.js';
+import { setDragData, handleGenericDragEnd, handleDragStartProofLine } from './drag-drop.js';
 
 // --- Helper Functions ---
 export function isNegationOf(f1, f2) {
@@ -85,7 +85,9 @@ export function addProofLine(formula, justification, scopeLevel, isAssumptionFla
     };
 
     store.getState().addProofLine(lineData);
-    checkWinCondition();
+    if (checkWinCondition()) {
+        EventBus.emit('game:win');
+    }
     return lineData;
 }
 
@@ -250,7 +252,6 @@ export function checkWinCondition() {
     for (const line of proofLines) {
         if (line.scopeLevel === 0 && line.isProven) {
             if (LogicParser.areAstsEqual(line.formula, goalAst)) {
-                EventBus.emit('game:win');
                 return true;
             }
         }
@@ -276,34 +277,6 @@ export function handleSubproofToggle(event) {
 export function setupProofLineDragging(proofList) {
     proofList.addEventListener('dragstart', handleDragStartProofLine);
     proofList.addEventListener('dragend', handleGenericDragEnd);
-}
-
-function handleDragStartProofLine(e) {
-    e.stopPropagation();
-    const lineItem = e.target.closest('li[data-line-number]');
-    if (!lineItem) return;
-
-    const { lineNumber: lineId, scopeLevel: scopeStr, isProven: isProvenStr, isAssumption: isAssumptionStr } = lineItem.dataset;
-    const scope = parseInt(scopeStr);
-    if (!lineId || isNaN(scope)) {
-        EventBus.emit('feedback:show', { message: "Drag Error: Missing lineId/scope.", isError: true });
-        e.preventDefault();
-        return;
-    }
-    if (isProvenStr !== 'true' && isAssumptionStr !== 'true') {
-        EventBus.emit('feedback:show', { message: "Cannot use unproven 'Show' line as premise.", isError: true });
-        e.preventDefault();
-        return;
-    }
-
-    const formulaDiv = lineItem.querySelector('.formula');
-    const formulaText = formulaDiv.dataset.formula;
-    setDragData(e, {
-        sourceType: 'proof-line-formula', formula: formulaText.trim(),
-        lineId: lineId, scopeLevel: scope,
-        elementId: lineItem.id || (lineItem.id = `proofline-${lineId.replace('.', '-')}`)
-    });
-    formulaDiv.classList.add('dragging');
 }
 
 

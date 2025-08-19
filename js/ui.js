@@ -3,7 +3,7 @@ import { EventBus } from './event-bus.js';
 import { problemSets } from './problems.js';
 import { ruleSet, handleRuleItemClick, handleRuleItemDragEnter, handleRuleItemDragLeave, handleDropOnRuleSlot } from './rules.js';
 import { handleWffDragStart, handleGenericDragEnd, handleDropOnConnectiveHotspot, handleDropOnWffOutputTray, handleDropOnTrashCan, createDragHandler } from './drag-drop.js';
-import { handleSubproofToggle, setupProofLineDragging, handleDropOnProofArea } from './proof.js';
+import { handleSubproofToggle, setupProofLineDragging, handleDropOnProofArea, checkWinCondition } from './proof.js';
 import { startTutorial, propositionalTutorialSteps, folTutorialSteps } from './tutorial.js';
 import { LogicParser } from './parser.js';
 
@@ -45,44 +45,9 @@ export function render() {
     displayCurrentFeedback();
     renderWffTray(state.wffTray);
     updateConnectiveHotspots(state.wffConstruction);
-    checkWinState(state);
-}
-
-function checkWinState(state) {
-    const { proofLines, goalFormula } = state;
-    if (!goalFormula) return;
-    const goalAst = goalFormula.ast;
-    if (!goalAst) return;
-
-    const hasWon = proofLines.some(line =>
-        line.scopeLevel === 0 &&
-        line.isProven &&
-        LogicParser.areAstsEqual(line.formula, goalAst)
-    );
-
-    if (hasWon) {
+    if (checkWinCondition()) {
         const { currentProblem } = store.getState();
         EventBus.emit('game:win');
-        //     const message = `Congratulations! You solved ${problemSets[currentProblem.set].name} #${currentProblem.number}.`;
-        //     if (proofFeedbackDiv) {
-        //         proofFeedbackDiv.textContent = message;
-        //         proofFeedbackDiv.className = 'text-center font-bold flex-grow mx-2 text-green-400';
-        //     }
-        //     // Check if next problem button already exists to prevent duplication
-        // ;
-        //     if (!document.querySelector('#next')) {
-        //         const nextProblemButton = document.createElement('button');
-        //         nextProblemButton.id="next";
-        //         nextProblemButton.textContent = 'Next Problem →';
-        //         nextProblemButton.className = 'bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded m-2';
-        //         nextProblemButton.onclick = () => {
-
-        //             nextProblemButton.remove();
-        //         };
-        //         if (proofFeedbackDiv && proofFeedbackDiv.parentElement) {
-        //             proofFeedbackDiv.parentElement.appendChild(nextProblemButton);
-        //         }
-        //     }
     }
 }
 

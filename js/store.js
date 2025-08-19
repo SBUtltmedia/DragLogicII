@@ -41,8 +41,8 @@ export const store = createStore((set, get) => ({
             };
         });
         const goalAst = { 
-            formula: problem.goal, 
-            ast: LogicParser.textToAst(problem.goal),
+            formula: problem.goal.formula || problem.goal, 
+            ast: LogicParser.textToAst(problem.goal.formula || problem.goal),
             isProven: false 
         };
 
