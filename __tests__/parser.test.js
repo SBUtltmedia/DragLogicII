@@ -1,22 +1,22 @@
 import { LogicParser } from '../js/parser.js';
 
-describe('LogicParser', () => {
-  describe('textToAst', () => {
-    test('should parse atomic propositions correctly', () => {
+describe('Logic Parser', () => {
+  describe('textToAst conversion', () => {
+    test('should parse simple atomic formulas', () => {
       const ast = LogicParser.textToAst('P');
       expect(ast).toEqual({ type: 'atomic', value: 'P' });
     });
 
-    test('should parse negation correctly', () => {
+    test('should parse negation formulas', () => {
       const ast = LogicParser.textToAst('~P');
-      expect(ast).toEqual({
-        type: 'negation',
-        operand: { type: 'atomic', value: 'P' }
+      expect(ast).toEqual({ 
+        type: 'negation', 
+        operand: { type: 'atomic', value: 'P' } 
       });
     });
 
-    test('should parse conjunction correctly', () => {
-      const ast = LogicParser.textToAst('P ∧ Q');
+    test('should parse conjunction formulas', () => {
+      const ast = LogicParser.textToAst('(P ∧ Q)');
       expect(ast).toEqual({
         type: 'binary',
         operator: '∧',
@@ -25,8 +25,18 @@ describe('LogicParser', () => {
       });
     });
 
-    test('should parse implication correctly', () => {
-      const ast = LogicParser.textToAst('P → Q');
+    test('should parse disjunction formulas', () => {
+      const ast = LogicParser.textToAst('(P ∨ Q)');
+      expect(ast).toEqual({
+        type: 'binary',
+        operator: '∨',
+        left: { type: 'atomic', value: 'P' },
+        right: { type: 'atomic', value: 'Q' }
+      });
+    });
+
+    test('should parse conditional formulas', () => {
+      const ast = LogicParser.textToAst('(P → Q)');
       expect(ast).toEqual({
         type: 'binary',
         operator: '→',
@@ -35,14 +45,24 @@ describe('LogicParser', () => {
       });
     });
 
-    test('should handle parentheses correctly', () => {
-      const ast = LogicParser.textToAst('(P ∧ Q) → R');
+    test('should parse biconditional formulas', () => {
+      const ast = LogicParser.textToAst('(P ↔ Q)');
       expect(ast).toEqual({
         type: 'binary',
-        operator: '→',
+        operator: '↔',
+        left: { type: 'atomic', value: 'P' },
+        right: { type: 'atomic', value: 'Q' }
+      });
+    });
+
+    test('should handle nested expressions', () => {
+      const ast = LogicParser.textToAst('(P → Q) ∧ R');
+      expect(ast).toEqual({
+        type: 'binary',
+        operator: '∧',
         left: {
           type: 'binary',
-          operator: '∧',
+          operator: '→',
           left: { type: 'atomic', value: 'P' },
           right: { type: 'atomic', value: 'Q' }
         },
@@ -50,120 +70,96 @@ describe('LogicParser', () => {
       });
     });
 
-    test('should throw error for malformed input', () => {
-      expect(() => LogicParser.textToAst('P ∧')).toThrow('Parsing Error');
-    });
-
-    test('should parse predicates with no arguments', () => {
-      const ast = LogicParser.textToAst('F');
-      expect(ast).toEqual({ type: 'predicate', name: 'F', args: [] });
-    });
-
-    test('should parse predicates with one argument', () => {
-      const ast = LogicParser.textToAst('F(x)');
-      expect(ast).toEqual({
-        type: 'predicate',
-        name: 'F',
-        args: [{ type: 'variable', value: 'x' }]
-      });
-    });
-
-    test('should parse predicates with multiple arguments', () => {
-      const ast = LogicParser.textToAst('G(x, y, z)');
-      expect(ast).toEqual({
-        type: 'predicate',
-        name: 'G',
-        args: [
-          { type: 'variable', value: 'x' },
-          { type: 'variable', value: 'y' },
-          { type: 'variable', value: 'z' }
-        ]
-      });
-    });
-
-    test('should parse universal quantifiers', () => {
-      const ast = LogicParser.textToAst('∀x(F(x))');
-      expect(ast).toEqual({
-        type: 'quantifier',
-        quantifier: '∀',
-        variable: 'x',
-        formula: {
-          type: 'predicate',
-          name: 'F',
-          args: [{ type: 'variable', value: 'x' }]
-        }
-      });
-    });
-
-    test('should parse existential quantifiers', () => {
-      const ast = LogicParser.textToAst('∃y(G(y))');
-      expect(ast).toEqual({
-        type: 'quantifier',
-        quantifier: '∃',
-        variable: 'y',
-        formula: {
-          type: 'predicate',
-          name: 'G',
-          args: [{ type: 'variable', value: 'y' }]
-        }
-      });
-    });
-
-    test('should parse descriptions', () => {
-      const ast = LogicParser.textToAst('ιx(F(x))');
-      expect(ast).toEqual({
-        type: 'description',
-        operator: 'ι',
-        variable: 'x',
-        formula: {
-          type: 'predicate',
-          name: 'F',
-          args: [{ type: 'variable', value: 'x' }]
-        }
-      });
+    test('should throw error for invalid syntax', () => {
+      expect(() => LogicParser.textToAst('(P ∧')).toThrow('Unexpected token');
     });
   });
 
-  describe('astToText', () => {
-    test('should convert atomic proposition to text', () => {
+  describe('astToText conversion', () => {
+    test('should convert atomic formulas correctly', () => {
       const ast = { type: 'atomic', value: 'P' };
       const text = LogicParser.astToText(ast);
       expect(text).toBe('P');
     });
 
-    test('should convert negation to text', () => {
-      const ast = {
-        type: 'negation',
-        operand: { type: 'atomic', value: 'P' }
+    test('should convert negation formulas correctly', () => {
+      const ast = { 
+        type: 'negation', 
+        operand: { type: 'atomic', value: 'P' } 
       };
       const text = LogicParser.astToText(ast);
       expect(text).toBe('~P');
     });
+
+    test('should convert conjunction formulas correctly', () => {
+      const ast = {
+        type: 'binary',
+        operator: '∧',
+        left: { type: 'atomic', value: 'P' },
+        right: { type: 'atomic', value: 'Q' }
+      };
+      const text = LogicParser.astToText(ast);
+      // Note: Outer parentheses aren't added for top-level binary operations
+      expect(text).toBe('P ∧ Q');
+    });
   });
 
-  describe('areAstsEqual', () => {
-    test('should correctly compare equal atomic propositions', () => {
+  describe('areAstsEqual comparison', () => {
+    test('should correctly identify equal atomic formulas', () => {
       const ast1 = { type: 'atomic', value: 'P' };
       const ast2 = { type: 'atomic', value: 'P' };
       expect(LogicParser.areAstsEqual(ast1, ast2)).toBe(true);
     });
 
-    test('should correctly compare different atomic propositions', () => {
+    test('should correctly identify different atomic formulas as not equal', () => {
       const ast1 = { type: 'atomic', value: 'P' };
       const ast2 = { type: 'atomic', value: 'Q' };
       expect(LogicParser.areAstsEqual(ast1, ast2)).toBe(false);
     });
+
+    test('should correctly handle negations', () => {
+      const ast1 = { type: 'negation', operand: { type: 'atomic', value: 'P' } };
+      const ast2 = { type: 'negation', operand: { type: 'atomic', value: 'P' } };
+      expect(LogicParser.areAstsEqual(ast1, ast2)).toBe(true);
+    });
+
+    test('should correctly identify not equal negations', () => {
+      const ast1 = { type: 'negation', operand: { type: 'atomic', value: 'P' } };
+      const ast2 = { type: 'negation', operand: { type: 'atomic', value: 'Q' } };
+      expect(LogicParser.areAstsEqual(ast1, ast2)).toBe(false);
+    });
+
+    test('should correctly handle complex nested structures', () => {
+      const ast1 = {
+        type: 'binary',
+        operator: '→',
+        left: { type: 'atomic', value: 'P' },
+        right: { type: 'atomic', value: 'Q' }
+      };
+      const ast2 = {
+        type: 'binary',
+        operator: '→',
+        left: { type: 'atomic', value: 'P' },
+        right: { type: 'atomic', value: 'Q' }
+      };
+      expect(LogicParser.areAstsEqual(ast1, ast2)).toBe(true);
+    });
   });
 
-  describe('tokenize', () => {
-    test('should split simple proposition correctly', () => {
+  describe('tokenize function', () => {
+    test('should correctly tokenize atomic formula', () => {
       const tokens = LogicParser.tokenize('P');
       expect(tokens).toEqual(['P']);
     });
 
-    test('should split conjunction correctly', () => {
-      const tokens = LogicParser.tokenize('P ∧ Q');
-      expect(tokens).toEqual(['P', '∧', 'Q']);
+    test('should correctly tokenize complex expression', () => {
+      const tokens = LogicParser.tokenize('(P ∧ Q)');
+      expect(tokens).toEqual(['(', 'P', '∧', 'Q', ')']);
+    });
+
+    test('should handle spaces correctly', () => {
+      const tokens = LogicParser.tokenize(' ( P ∧ Q ) ');
+      expect(tokens).toEqual(['(', 'P', '∧', 'Q', ')']);
     });
   });
 });

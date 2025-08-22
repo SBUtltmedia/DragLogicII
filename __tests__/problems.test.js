@@ -26,5 +26,18 @@ describe('Problems Module', () => {
       expect(Array.isArray(firstProblem.premises)).toBe(true);
       expect(typeof firstProblem.goal.formula).toBe('string');
     });
+    
+    test('should contain valid logical formulas in problems', () => {
+      // Test that the problems contain properly formatted premises and goals
+      const propositionalProblems = problemSets[1].problems;
+      
+      propositionalProblems.forEach((problem, index) => {
+        expect(problem.premises).toBeDefined();
+        expect(Array.isArray(problem.premises)).toBe(true);
+        
+        expect(problem.goal).toBeDefined();
+        expect(typeof problem.goal.formula).toBe('string');
+      });
+    });
   });
 });

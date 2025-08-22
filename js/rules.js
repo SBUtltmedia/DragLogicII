@@ -69,15 +69,15 @@ export const ruleSet = {
     },
     'Add': {
         name: 'Addition (Add)',
-        premises: 1,
+        premises: 2,
         logicType: 'propositional',
         slots: [
-            { placeholder: 'φ', expectedPattern: 'any' }
+            { placeholder: 'φ', expectedPattern: 'any' },
+            { placeholder: 'ψ', expectedPattern: 'any' }
         ],
-        apply: (premises, additionalData) => {
-            if (premises.length !== 1 || !additionalData || !additionalData.q) return null;
-            const p = premises[0].formula;
-            const q = LogicParser.textToAst(additionalData.q);
+        apply: (premises) => {
+            if (premises.length !== 2) return null;
+            const [p, q] = premises.map(p => p.formula);
             return { type: 'binary', operator: '∨', left: p, right: q };
         }
     },
@@ -113,15 +113,14 @@ export const ruleSet = {
     },
     'CD': {
         name: 'Constructive Dilemma (CD)',
-        premises: 3,
+        premises: 2,
         logicType: 'propositional',
         slots: [
             { placeholder: '(φ → ψ) ∧ (χ → ω)', expectedPattern: 'binary.∧' },
-            { placeholder: 'φ ∨ χ', expectedPattern: 'binary.∨' },
-            { placeholder: 'ψ ∨ ω', expectedPattern: 'any' } // This is the conclusion, not a premise
+            { placeholder: 'φ ∨ χ', expectedPattern: 'binary.∨' }
         ],
         apply: (premises) => {
-            if (premises.length !== 2) return null; // Expecting the two main premises
+            if (premises.length !== 2) return null;
             const [implications, disjunction] = premises.map(p => p.formula);
 
             if (implications.type === 'binary' && implications.operator === '∧' &&
@@ -173,12 +172,10 @@ export const ruleSet = {
                 return;
             }
             const assumptionAst = LogicParser.textToAst(assumption);
-            // Typically, the assumption for RAA is the negation of what you want to prove.
             store.getState().startSubproof('RAA', assumptionAst);
         },
         end: (subproof) => {
             if (!subproof || subproof.type !== 'RAA' || subproof.lines.length < 2) return null;
-
             // Find a contradiction: a formula and its negation
             for (let i = 0; i < subproof.lines.length; i++) {
                 for (let j = i + 1; j < subproof.lines.length; j++) {
@@ -212,12 +209,10 @@ export const ruleSet = {
             const universal = premises[0].formula;
             if (universal.type !== 'quantifier' || universal.quantifier !== '∀') return null;
 
-            // `instance` should be a variable or constant to replace the quantified variable.
-            // For simplicity, we'll assume it's a simple variable name string like 'y' or a constant 'a'.
-            const variableToReplace = universal.variable;
+            // `instance` should be a variable or constant to replace the quantified variable
+            // For simplicity in this version, we'll just call replaceVariable directly
             const instanceAst = LogicParser.textToAst(additionalData.instance);
-
-            return LogicParser.substitute(universal.formula, variableToReplace, instanceAst);
+            return LogicParser.substitute(universal.formula, universal.variable, instanceAst);
         }
     },
     'EG': {
@@ -232,13 +227,12 @@ export const ruleSet = {
             const specific_instance = premises[0].formula;
             const variable = additionalData.variable; // e.g., 'x'
 
-            // This is tricky. We need to find the constant 'a' in F(a) and replace it with x.
-            // This requires a more complex substitution logic or a UI to select the term to generalize.
-            // Simple case: assume the formula is a predicate with one argument F(a) -> ∃x F(x)
+            // This is tricky. We need to find the constant 'a' in F(a) and replace it with x
+            // Simple case: assume the formula is a predicate with one argument
             if (specific_instance.type === 'predicate' && specific_instance.args.length > 0) {
-                // This is a simplification. A real implementation needs to handle complex formulas.
-                const termToGeneralize = specific_instance.args[0]; // e.g., the 'a' AST
-                const generalizedFormula = LogicParser.substitute(specific_instance, termToGeneralize.value, { type: 'variable', value: variable });
+                // This is a simplification - a real implementation would need more complex logic
+                const termToGeneralize = specific_instance.args[0];
+                const generalizedFormula = LogicParser.substitute(specific_instance, termToGeneralize, { type: 'variable', name: variable });
                 return { type: 'quantifier', quantifier: '∃', variable: variable, formula: generalizedFormula };
             }
             return null;
@@ -257,12 +251,10 @@ export const ruleSet = {
             if (premises.length !== 1 || !additionalData || !additionalData.newConstant) return null;
             const existential = premises[0].formula;
             if (existential.type !== 'quantifier' || existential.quantifier !== '∃') return null;
-
             // IMPORTANT: `newConstant` must be a constant that has not appeared in the proof before.
-            // This check should be performed by the calling logic (e.g., in the store).
+            // In this simplified version, we'll assume it's been validated externally.
             const variableToReplace = existential.variable;
-            const constantAst = { type: 'variable', value: additionalData.newConstant }; // Treat constants as variables for substitution
-
+            const constantAst = { type: 'variable', name: additionalData.newConstant }; // Treat as variables for substitution
             return LogicParser.substitute(existential.formula, variableToReplace, constantAst);
         }
     },
@@ -285,14 +277,13 @@ export const ruleSet = {
             const variable = existentialFormula.variable;
             const formula = existentialFormula.formula;
             const constant = 'a'; // This should be a fresh constant not appearing in the proof
-            const assumption = LogicParser.substitute(formula, variable, { type: 'variable', value: constant });
-
+            const assumption = LogicParser.substitute(formula, variable, { type: 'variable', name: constant });
             store.getState().startSubproof('EE', assumption, { existentialFormula });
         },
         end: (subproof) => {
             if (!subproof || subproof.type !== 'EE' || subproof.lines.length === 0) return null;
             const conclusion = subproof.lines[subproof.lines.length - 1].formula;
-            // Here we should check that the constant 'a' does not appear in the conclusion
+            // Check that constant does not appear in conclusion
             return conclusion;
         }
     },
@@ -310,11 +301,11 @@ export const ruleSet = {
             const specific_instance = premises[0].formula;
             const variable = additionalData.variable; // e.g., 'x'
 
-            // The calling logic must verify that the constant being generalized is arbitrary.
+            // The calling logic must verify that the constant being generalized is arbitrary
             // Simple case: F(a) -> ∀x F(x)
-            if (specific_instance.type === 'predicate') {
-                const termToGeneralize = specific_instance.args[0]; // This is a huge simplification
-                const generalizedFormula = LogicParser.substitute(specific_instance, termToGeneralize.value, { type: 'variable', value: variable });
+            if (specific_instance.type === 'predicate' && specific_instance.args.length > 0) {
+                const termToGeneralize = specific_instance.args[0];
+                const generalizedFormula = LogicParser.substitute(specific_instance, termToGeneralize, { type: 'variable', name: variable });
                 return { type: 'quantifier', quantifier: '∀', variable: variable, formula: generalizedFormula };
             }
             return null;
@@ -365,6 +356,49 @@ export function handleDropOnRuleSlot(event, ruleElement) {
     const data = JSON.parse(jsonData);
     const premiseIndex = parseInt(slot.dataset.premiseIndex, 10);
 
+    // Validate source of item being dropped
+    const ruleCheck = ruleSet[activeRule];
+    
+    // For Add rule, special handling:
+    // - First slot (premiseIndex === 0): Must come from proof area  
+    // - Second slot (premiseIndex === 1): Can come from either proof area or WFF constructor
+    
+    if (activeRule === 'Add') {
+        // If this is the first slot, only allow items from proof area
+        if (premiseIndex === 0) {
+            if (data.source !== 'wff-output-tray' && data.source !== 'proof-lines') {
+                store.getState().addFeedback('First slot of Add rule must come from proof area.', 'error');
+                return;
+            }
+        }
+        // Second slot can accept items from both proof area and WFF constructor 
+        else if (premiseIndex === 1) {
+            // This validation is already handled by normal logic,
+            // but let's make sure we allow the right sources
+            if (data.source !== 'wff-output-tray' && data.source !== 'proof-lines' && data.source !== 'wff-constructor') {
+                store.getState().addFeedback('Second slot of Add rule can only accept items from proof area or WFF constructor.', 'error');
+                return;
+            }
+        }
+    } else {
+        // For all other rules, only allow items from proof area (wff-output-tray or proof-lines)
+        if (data.source !== 'wff-output-tray' && data.source !== 'proof-lines') {
+            store.getState().addFeedback('This rule can only accept premises from the proof area.', 'error');
+            return;
+        }
+    }
+
+    // Check if item comes from WFF constructor and validate it
+    if (data.source === 'wff-constructor') {
+        // Validate that the formula is well-formed before allowing drop
+        try {
+            LogicParser.textToAst(data.formula);
+        } catch (e) {
+            store.getState().addFeedback(`Invalid formula from WFF constructor: ${e.message}`, 'error');
+            return;
+        }
+    }
+
     // Validate premise pattern if specified
     const expectedPattern = slot.dataset.expectedPattern;
     if (expectedPattern && expectedPattern !== 'any') {
@@ -383,8 +417,7 @@ export function handleDropOnRuleSlot(event, ruleElement) {
     collectedPremises[premiseIndex] = data;
     EventBus.emit('rules:fillSlot', { slot, data });
 
-    const rule = ruleSet[activeRule];
-    if (collectedPremises.filter(p => p).length === rule.premises) {
+    if (collectedPremises.filter(p => p).length === ruleCheck.premises) {
         applyActiveRule();
     }
 }
@@ -401,22 +434,21 @@ function applyActiveRule() {
     }));
 
     let additionalData = {};
-    // Handle rules that need extra input, like 'Add'
+    
+    // Handle rules that need extra input (like Add which needs the second parameter)
     if (activeRule === 'Add') {
-        const q = prompt('Enter the formula to add (e.g., Q):');
-        if (!q) {
-            resetRuleState();
-            return;
-        }
-        additionalData.q = q;
+        // In this context, for a simple implementation:
+        // If we have two premises in collectedPremises, and they're from the proof area,
+        // we've already validated their sources. The rule can be applied as-is.
     }
 
     const resultAst = rule.apply(premisesData, additionalData);
 
     if (resultAst) {
         const justification = `${activeRule} ${premisesData.map(p => p.line).join(', ')}`;
-        addProofLine(LogicParser.astToText(resultAst), justification, store.getState().currentScopeLevel);
+        addProofLine(LogicParser.astToString(resultAst), justification, store.getState().currentScope);
     } else {
+        // In case rule application fails, give feedback
         store.getState().addFeedback(`Rule ${activeRule} could not be applied.`, 'error');
     }
 

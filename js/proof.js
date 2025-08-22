@@ -29,10 +29,16 @@ export function addProofLine(formula, justification, scopeLevel, isAssumptionFla
     
     let formulaAst;
     let cleanFormula;
+    let formulaForParsing;
 
     if (typeof formula === 'string') {
         cleanFormula = formula.trim();
-        formulaAst = LogicParser.textToAst(cleanFormula);
+        if (isShowLineFlag) {
+            formulaForParsing = cleanFormula.replace(/^Show:\s*/i, '');
+        } else {
+            formulaForParsing = cleanFormula;
+        }
+        formulaAst = LogicParser.textToAst(formulaForParsing);
     } else {
         formulaAst = formula;
         cleanFormula = LogicParser.astToText(formulaAst);
@@ -93,16 +99,51 @@ export function addProofLine(formula, justification, scopeLevel, isAssumptionFla
 
 // --- Subproof Management ---
 
-export function startRAA(goalAst) {
-    const { currentScopeLevel } = store.getState();
-    const wffToProve = LogicParser.astToText(goalAst);
+export function startRAA(wffToProve) {
+    console.log("startRAA called with:", wffToProve);
+    const { currentScopeLevel, subGoalStack } = store.getState();
+    const goalAst = LogicParser.textToAst(wffToProve);
+    if (!goalAst) {
+        EventBus.emit('feedback:show', { message: "Cannot start RAA: Invalid formula.", isError: true });
+        return;
+    }
 
-    // 1. Add the "Show" line
-    const showLineData = addProofLine(`Show: ${wffToProve}`, "Goal (RAA)", currentScopeLevel, false, true);
-    if (!showLineData) return; // Stop if the line couldn't be added
+    const showLineItem = addProofLine(`Show: ${wffToProve}`, "Goal (RAA)", currentScopeLevel, false, true);
+    if (!showLineItem) {
+        return;
+    }
 
-    // 2. Update state for the new subproof
-    store.getState().startSubproof('RAA', goalAst);
+    const subproofId = showLineItem.subproofId;
+    const showLineFullId = showLineItem.lineNumber;
+    const newScopeLevel = currentScopeLevel + 1;
+    store.getState().setCurrentScopeLevel(newScopeLevel);
+
+
+    const assumptionAst = { type: 'negation', operand: goalAst };
+    const assumptionFormula = LogicParser.astToText(assumptionAst);
+
+    const newSubGoal = {
+        forWff: wffToProve,
+        type: "RAA",
+        assumptionFormula: assumptionFormula,
+        showLineFullId: showLineFullId,
+        parentLineDisplay: showLineFullId,
+        subLineLetterCode: 97,
+        scope: newScopeLevel,
+        assumptionLineFullId: "",
+        subproofId: subproofId
+    };
+
+    const newSubGoalStack = [...subGoalStack, newSubGoal];
+    store.getState().updateSubGoalStack(newSubGoalStack);
+
+    const assumptionLineItem = addProofLine(assumptionFormula, "Assumption (RAA)", newScopeLevel, true);
+    if (assumptionLineItem) {
+        const latestSubGoal = store.getState().subGoalStack.slice(-1)[0];
+        latestSubGoal.assumptionLineFullId = assumptionLineItem.lineNumber;
+    }
+    EventBus.emit('subgoal:update');
+    EventBus.emit('feedback:show', { message: `Subproof (RAA): Assume ${assumptionFormula}. Derive a contradiction.`, isError: false });
 }
 
 export function startConditionalIntroduction(conditionalAst) {
@@ -209,12 +250,23 @@ function dischargeEE({ subproof, conclusionLineId }) {
 
 export function handleDropOnProofArea(event) {
     event.preventDefault();
+    console.log("handleDropOnProofArea called");
     const jsonData = event.dataTransfer.getData('application/json');
     if (!jsonData) {
         return;
     }
     const data = JSON.parse(jsonData);
+    console.log("Drop data:", data);
     const targetLi = event.target.closest('li[data-line-number]');
+
+    // If dropped on the main proof area (not a specific line) and it's from the WFF constructor
+    if (!targetLi && (data.source === 'wff-constructor' || data.source === 'wff-output-tray')) {
+        startRAA(data.formula);
+        if (data.source === 'wff-output-tray') {
+            EventBus.emit('wff:remove', { elementId: data.elementId });
+        }
+        return;
+    }
 
     if (targetLi && targetLi.dataset.isShowLine === 'true' && data.sourceType === 'proof-line-formula') {
         const subproofId = targetLi.dataset.subproofId;
@@ -226,9 +278,15 @@ export function handleDropOnProofArea(event) {
         }
     }
 
-    // Logic to add the formula as a new proof line, likely as an assumption
-    // This might need a more sophisticated handling, e.g., opening a subproof
-    addProofLine(data.formula, 'Assumption', store.getState().currentScopeLevel);
+    // Handle reiteration
+    if (data.sourceType === 'proof-line-formula') {
+        const { formula, lineId, scopeLevel } = data;
+        if (scopeLevel <= store.getState().currentScopeLevel) {
+            addProofLine(formula, `Re ${lineId}`, store.getState().currentScopeLevel);
+        } else {
+            EventBus.emit('feedback:show', { message: "Reiteration Error: Cannot reiterate from inner scope.", isError: true });
+        }
+    }
     
     document.getElementById('proof-lines').classList.remove('drag-over-proof');
 }
@@ -282,6 +340,7 @@ export function setupProofLineDragging(proofList) {
 
 // --- Initialization ---
 export function initializeProof() {
+    console.log("Initializing proof...");
     const proofList = document.getElementById('proof-lines');
     if (proofList) {
         proofList.addEventListener('click', handleSubproofToggle);

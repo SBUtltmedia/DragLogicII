@@ -34,7 +34,7 @@ describe('Rules Module', () => {
   describe('Modus Ponens (MP) rule', () => {
     const mpRule = ruleSet.MP;
 
-    it('should correctly apply MP when premises are in order', () => {
+    test('should correctly apply MP when premises are in order', () => {
         const slotsData = [
             { formula: LogicParser.textToAst('P→Q'), line: '1' },
             { formula: LogicParser.textToAst('P'), line: '2' }
@@ -43,7 +43,7 @@ describe('Rules Module', () => {
         expect(LogicParser.areAstsEqual(result, LogicParser.textToAst('Q'))).toBe(true);
     });
 
-    it('should correctly apply MP when premises are reversed', () => {
+    test('should correctly apply MP when premises are reversed', () => {
         const slotsData = [
             { formula: LogicParser.textToAst('P'), line: '1' },
             { formula: LogicParser.textToAst('P→Q'), line: '2' }
@@ -52,12 +52,33 @@ describe('Rules Module', () => {
         expect(result).toBeNull();
     });
 
-    it('should return null for invalid premises', () => {
+    test('should return null for invalid premises', () => {
         const slotsData = [
             { formula: LogicParser.textToAst('P→Q'), line: '1' },
             { formula: LogicParser.textToAst('R'), line: '2' }
         ];
         const result = mpRule.apply(slotsData);
+        expect(result).toBeNull();
+    });
+  });
+
+  describe('Conjunction Introduction (Conj) rule', () => {
+    const conjRule = ruleSet.Conj;
+
+    test('should correctly apply Conj rule', () => {
+        const slotsData = [
+            { formula: LogicParser.textToAst('P'), line: '1' },
+            { formula: LogicParser.textToAst('Q'), line: '2' }
+        ];
+        const result = conjRule.apply(slotsData);
+        expect(LogicParser.areAstsEqual(result, LogicParser.textToAst('P ∧ Q'))).toBe(true);
+    });
+
+    test('should return null for insufficient premises', () => {
+        const slotsData = [
+            { formula: LogicParser.textToAst('P'), line: '1' }
+        ];
+        const result = conjRule.apply(slotsData);
         expect(result).toBeNull();
     });
   });

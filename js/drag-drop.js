@@ -14,17 +14,31 @@ export function setDragData(event, dataObject) {
 
 export function handleWffDragStart(event) {
     const formulaElement = event.target.closest('.formula');
-    if (!formulaElement) {
+    let data;
+
+    if (formulaElement) {
+        // It's a formula from the tray or proof lines
+        data = {
+            formula: formulaElement.dataset.formula,
+            source: formulaElement.parentElement.id,
+            elementId: formulaElement.id,
+            line: formulaElement.closest('li')?.dataset.lineNumber
+        };
+    } else if (event.target.classList.contains('draggable-var')) {
+        // It's a variable from the constructor tools
+        const variableElement = event.target;
+        data = {
+            formula: variableElement.dataset.symbol,
+            source: 'wff-constructor',
+            type: variableElement.dataset.type
+        };
+    } else {
+        // Not a draggable element we handle here
         event.preventDefault();
         return;
     }
+
     event.dataTransfer.effectAllowed = 'copy';
-    const data = {
-        formula: formulaElement.dataset.formula,
-        source: formulaElement.parentElement.id, // e.g., 'wff-output-tray' or 'proof-lines'
-        elementId: formulaElement.id,
-        line: formulaElement.closest('li')?.dataset.lineNumber
-    };
     setDragData(event, data);
     event.target.classList.add('dragging');
 }

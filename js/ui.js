@@ -3,7 +3,7 @@ import { EventBus } from './event-bus.js';
 import { problemSets } from './problems.js';
 import { ruleSet, handleRuleItemClick, handleRuleItemDragEnter, handleRuleItemDragLeave, handleDropOnRuleSlot } from './rules.js';
 import { handleWffDragStart, handleGenericDragEnd, handleDropOnConnectiveHotspot, handleDropOnWffOutputTray, handleDropOnTrashCan, createDragHandler } from './drag-drop.js';
-import { handleSubproofToggle, setupProofLineDragging, handleDropOnProofArea, checkWinCondition } from './proof.js';
+import { initializeProof, handleSubproofToggle, setupProofLineDragging, handleDropOnProofArea, checkWinCondition } from './proof.js';
 import { startTutorial, propositionalTutorialSteps, folTutorialSteps } from './tutorial.js';
 import { LogicParser } from './parser.js';
 
@@ -11,7 +11,7 @@ import { LogicParser } from './parser.js';
 let wffOutputTray, draggableVariables, connectiveHotspots, trashCanDropArea, proofList, proofFeedbackDiv, subGoalDisplayContainer, gameTitle, prevFeedbackBtn, nextFeedbackBtn, zoomInWffBtn, zoomOutWffBtn, helpIcon, subproofsArea, inferenceRulesArea;
 let gameWrapper;
 
-function cacheDomElements() {
+export function cacheDomElements() {
     wffOutputTray = document.getElementById('wff-output-tray');
     draggableVariables = document.querySelectorAll('.draggable-var');
     connectiveHotspots = document.querySelectorAll('.connective-hotspot');
@@ -61,11 +61,15 @@ function updateConnectiveHotspots(wffConstruction) {
     });
 
     if (wffConstruction.firstOperand) {
-        const { connective } = wffConstruction;
+        const { connective, firstOperand } = wffConstruction;
         const hotspot = document.querySelector(`.connective-hotspot[data-connective="${connective}"]`);
         if (hotspot) {
             hotspot.classList.add('waiting');
-            hotspot.textContent = `${LogicParser.astToText(wffConstruction.firstOperand.formula)} ${connective} ?`;
+            if (connective === '∀' || connective === '∃') {
+                hotspot.textContent = `${connective}${firstOperand.formula}(?)`;
+            } else {
+                hotspot.textContent = `${firstOperand.formula} ${connective} ?`;
+            }
         }
     }
 }
@@ -331,7 +335,7 @@ export function addEventListeners() {
     zoomInWffBtn.addEventListener('click', () => EventBus.emit('wff:zoom', 1));
     zoomOutWffBtn.addEventListener('click', () => EventBus.emit('wff:zoom', -1));
 
-    setupProofLineDragging(proofList);
+    initializeProof();
 
     // --- Event Bus Subscriptions ---
     EventBus.on('render', render);

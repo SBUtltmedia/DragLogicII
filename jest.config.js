@@ -12,11 +12,7 @@ export default {
     '!js/main.js',
     '!js/app.js'
   ],
-  moduleNameMapper: {
-    '../js/store.js': '<rootDir>/__tests__/mocks__/store.js'
-  },
   testPathIgnorePatterns: [
     '<rootDir>/__tests__/mocks__/store.js',
-  ],
-  setupFilesAfterEnv: ['<rootDir>/__tests__/setup.js']
+  ]
 };

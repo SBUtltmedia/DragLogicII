@@ -72,20 +72,62 @@ export const store = createStore((set, get) => ({
     },
 
     constructWff: (operand, connective) => {
-        const { wffConstruction } = get();
-        if (!wffConstruction.firstOperand) {
-            set({ wffConstruction: { firstOperand: operand, connective: connective } });
-        } else {
-            const { firstOperand } = wffConstruction;
-            const newFormulaAst = {
-                type: 'binary',
-                operator: wffConstruction.connective,
-                left: LogicParser.textToAst(firstOperand.formula),
-                right: LogicParser.textToAst(operand.formula)
-            };
-            get().addWff(newFormulaAst);
-            set({ wffConstruction: { firstOperand: null, connective: null } });
+        const { wffConstruction, addWff, clearWffConstruction, addFeedback } = get();
+        const { firstOperand, connective: waitingConnective } = wffConstruction;
+
+        // Handle Quantifiers
+        if (connective === '∀' || connective === '∃') {
+            if (!firstOperand) { // Waiting for a variable
+                if (operand.type !== 'fol-variable') {
+                    addFeedback("Quantifiers require a variable first (x, y, or z).", "error");
+                    return;
+                }
+                set({ wffConstruction: { firstOperand: operand, connective: connective } });
+                EventBus.emit('render');
+            } else { // Already have variable, waiting for formula
+                if (waitingConnective === connective) {
+                    const ast = LogicParser.textToAst(operand.formula);
+                    if (!ast) { addFeedback("Invalid formula dropped on quantifier.", "error"); return; }
+                    const resultAst = { type: 'quantifier', quantifier: connective, variable: firstOperand.formula, formula: ast };
+                    addWff(resultAst);
+                    clearWffConstruction();
+                } else { addFeedback("Quantifier mismatch.", "error"); clearWffConstruction(); }
+            }
+            return;
         }
+
+        // Handle Propositional Connectives
+        const droppedAst = LogicParser.textToAst(operand.formula);
+        if (!droppedAst) { addFeedback("Invalid formula dropped.", "error"); return; }
+
+        if (connective === '~') { 
+            const newAst = { type: 'negation', operand: droppedAst };
+            addWff(newAst);
+            clearWffConstruction(); 
+        } else { 
+            if (!firstOperand) {
+                set({ wffConstruction: { firstOperand: operand, connective: connective } });
+                EventBus.emit('render');
+            } else {
+                if (waitingConnective === connective) { 
+                    const firstAst = LogicParser.textToAst(firstOperand.formula);
+                    if (!firstAst) { addFeedback("Invalid first formula.", "error"); clearWffConstruction(); return; }
+                    const newAst = { type: 'binary', operator: connective, left: firstAst, right: droppedAst };
+                    addWff(newAst);
+                    clearWffConstruction(); 
+                } else { addFeedback("WFF Error: Connective mismatch.", "error"); clearWffConstruction(); }
+            }
+        }
+    },
+
+    clearWffConstruction: () => {
+        set({ wffConstruction: { firstOperand: null, connective: null } });
+        EventBus.emit('render');
+    },
+
+    setWffConstruction: (wffConstruction) => {
+        set({ wffConstruction });
+        EventBus.emit('render');
     },
 
     addWff: (formula) => {
