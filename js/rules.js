@@ -446,7 +446,7 @@ function applyActiveRule() {
 
     if (resultAst) {
         const justification = `${activeRule} ${premisesData.map(p => p.line).join(', ')}`;
-        addProofLine(LogicParser.astToString(resultAst), justification, store.getState().currentScope);
+        addProofLine(LogicParser.astToText(resultAst), justification, store.getState().currentScopeLevel);
     } else {
         // In case rule application fails, give feedback
         store.getState().addFeedback(`Rule ${activeRule} could not be applied.`, 'error');

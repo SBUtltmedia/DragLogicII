@@ -333,6 +333,11 @@ button {
 .apply-rule-button { background-color: #10b981; margin-top: 0.5em; color: white; border: none; cursor: pointer; }
 .apply-rule-button:hover { background-color: #059669; }
 
+.selected {
+    border: 2px solid #f59e0b !important; /* Amber-500 */
+    box-shadow: 0 0 8px #f59e0b;
+}
+
 /* Intro.js overrides */
 .introjs-tooltip { color: #1f2937; }
 .introjs-tooltiptext { color: #1f2937; }

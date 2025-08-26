@@ -4,7 +4,8 @@ import { LogicParser } from '../js/parser.js';
 // Mock EventBus for tests
 jest.mock('../js/event-bus.js', () => ({
   EventBus: {
-    emit: jest.fn()
+    emit: jest.fn(),
+    on: jest.fn(),
   }
 }));
 

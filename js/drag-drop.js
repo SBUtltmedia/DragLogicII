@@ -134,8 +134,10 @@ export function handleDragStartProofLine(e) {
     const formulaDiv = lineItem.querySelector('.formula');
     const formulaText = formulaDiv.dataset.formula;
     setDragData(e, {
-        sourceType: 'proof-line-formula', formula: formulaText.trim(),
-        lineId: lineId, scopeLevel: scope,
+        source: 'proof-lines', 
+        formula: formulaText.trim(),
+        lineId: lineId, 
+        scopeLevel: scope,
         elementId: lineItem.id || (lineItem.id = `proofline-${lineId.replace('.', '-')}`)
     });
     formulaDiv.classList.add('dragging');

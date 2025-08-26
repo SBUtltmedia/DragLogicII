@@ -19,6 +19,7 @@ const initialState = {
     },
     nextLineNumberGlobal: 1,
     currentScopeLevel: 0,
+    selectedDraggable: null,
 };
 
 export const store = createStore((set, get) => ({
@@ -224,6 +225,14 @@ export const store = createStore((set, get) => ({
 
     setCurrentScopeLevel: (n) => {
         set({ currentScopeLevel: n });
+    },
+
+    setSelectedDraggable: (draggableData) => {
+        set({ selectedDraggable: draggableData });
+    },
+
+    clearSelectedDraggable: () => {
+        set({ selectedDraggable: null });
     },
 
     endSubproof: () => {

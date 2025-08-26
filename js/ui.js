@@ -3,9 +3,10 @@ import { EventBus } from './event-bus.js';
 import { problemSets } from './problems.js';
 import { ruleSet, handleRuleItemClick, handleRuleItemDragEnter, handleRuleItemDragLeave, handleDropOnRuleSlot } from './rules.js';
 import { handleWffDragStart, handleGenericDragEnd, handleDropOnConnectiveHotspot, handleDropOnWffOutputTray, handleDropOnTrashCan, createDragHandler } from './drag-drop.js';
-import { initializeProof, handleSubproofToggle, setupProofLineDragging, handleDropOnProofArea, checkWinCondition } from './proof.js';
+import { initializeProof, handleSubproofToggle, handleDropOnProofArea, checkWinCondition } from './proof.js';
 import { startTutorial, propositionalTutorialSteps, folTutorialSteps } from './tutorial.js';
 import { LogicParser } from './parser.js';
+import { handleDraggableClick, handleDroppableClick } from './click-to-move.js';
 
 // --- DOM Element References ---
 let wffOutputTray, draggableVariables, connectiveHotspots, trashCanDropArea, proofList, proofFeedbackDiv, subGoalDisplayContainer, gameTitle, prevFeedbackBtn, nextFeedbackBtn, zoomInWffBtn, zoomOutWffBtn, helpIcon, subproofsArea, inferenceRulesArea;
@@ -291,6 +292,7 @@ export function addEventListeners() {
     draggableVariables.forEach(v => {
         v.addEventListener('dragstart', handleWffDragStart);
         v.addEventListener('dragend', handleGenericDragEnd);
+        v.addEventListener('click', handleDraggableClick);
     });
 
     connectiveHotspots.forEach(spot => {
@@ -298,6 +300,7 @@ export function addEventListeners() {
         spot.addEventListener('dragover', handler.dragover);
         spot.addEventListener('dragleave', handler.dragleave);
         spot.addEventListener('drop', handleDropOnConnectiveHotspot);
+        spot.addEventListener('click', (e) => handleDroppableClick(e, handleDropOnConnectiveHotspot));
         spot.dataset.originalText = spot.textContent;
     });
 
@@ -307,18 +310,26 @@ export function addEventListeners() {
     wffOutputTray.addEventListener('dragover', wffOutputTrayHandler.dragover);
     wffOutputTray.addEventListener('dragleave', wffOutputTrayHandler.dragleave);
     wffOutputTray.addEventListener('drop', handleDropOnWffOutputTray);
+    wffOutputTray.addEventListener('click', handleDraggableClick);
 
     if (trashCanDropArea) {
         const trashCanHandler = createDragHandler('#trash-can-drop-area', 'trash-can-drag-over');
         trashCanDropArea.addEventListener('dragover', trashCanHandler.dragover);
         trashCanDropArea.addEventListener('dragleave', trashCanHandler.dragleave);
         trashCanDropArea.addEventListener('drop', handleDropOnTrashCan);
+        trashCanDropArea.addEventListener('click', (e) => handleDroppableClick(e, handleDropOnTrashCan));
     }
 
     const proofListHandler = createDragHandler('ol#proof-lines', 'drag-over-proof');
     proofList.addEventListener('dragover', proofListHandler.dragover);
     proofList.addEventListener('dragleave', proofListHandler.dragleave);
-    proofList.addEventListener('click', handleSubproofToggle);
+    proofList.addEventListener('click', (e) => {
+        if (e.target.closest('.formula')) {
+            handleDraggableClick(e);
+        } else {
+            handleDroppableClick(e, handleDropOnProofArea);
+        }
+    });
 
     addRuleEventListeners();
 
@@ -417,7 +428,13 @@ export function addEventListeners() {
 
 function addRuleEventListeners() {
     document.querySelectorAll('.rule-item').forEach(item => {
-        item.addEventListener('click', handleRuleItemClick);
+        item.addEventListener('click', (e) => {
+            if (e.target.closest('.drop-slot')) {
+                handleDroppableClick(e, (e) => handleDropOnRuleSlot(e, item));
+            } else {
+                handleRuleItemClick(e);
+            }
+        });
         item.addEventListener('dragenter', handleRuleItemDragEnter);
         item.addEventListener('dragleave', handleRuleItemDragLeave);
         item.querySelectorAll('.drop-slot').forEach(slot => {
