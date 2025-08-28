@@ -28,6 +28,7 @@ export const store = createStore((set, get) => ({
     // --- Actions ---
 
     loadProblem: (setNumber, problemNumber) => {
+        console.log(`Loading problem: set ${setNumber}, number ${problemNumber}`);
         const problem = problemSets[setNumber]?.problems[problemNumber - 1];
         if (!problem) {
             get().addFeedback(`Problem ${setNumber}-${problemNumber} not found.`, 'error');
@@ -72,142 +73,38 @@ export const store = createStore((set, get) => ({
         EventBus.emit('render');
     },
 
-    constructWff: (operand, connective) => {
-        const { wffConstruction, addWff, clearWffConstruction, addFeedback } = get();
-        const { firstOperand, connective: waitingConnective } = wffConstruction;
-
-        // Handle Quantifiers
-        if (connective === '∀' || connective === '∃') {
-            if (!firstOperand) { // Waiting for a variable
-                if (operand.type !== 'fol-variable') {
-                    addFeedback("Quantifiers require a variable first (x, y, or z).", "error");
-                    return;
-                }
-                set({ wffConstruction: { firstOperand: operand, connective: connective } });
-                EventBus.emit('render');
-            } else { // Already have variable, waiting for formula
-                if (waitingConnective === connective) {
-                    const ast = LogicParser.textToAst(operand.formula);
-                    if (!ast) { addFeedback("Invalid formula dropped on quantifier.", "error"); return; }
-                    const resultAst = { type: 'quantifier', quantifier: connective, variable: firstOperand.formula, formula: ast };
-                    addWff(resultAst);
-                    clearWffConstruction();
-                } else { addFeedback("Quantifier mismatch.", "error"); clearWffConstruction(); }
-            }
-            return;
-        }
-
-        // Handle Propositional Connectives
-        const droppedAst = LogicParser.textToAst(operand.formula);
-        if (!droppedAst) { addFeedback("Invalid formula dropped.", "error"); return; }
-
-        if (connective === '~') { 
-            const newAst = { type: 'negation', operand: droppedAst };
-            addWff(newAst);
-            clearWffConstruction(); 
-        } else { 
-            if (!firstOperand) {
-                set({ wffConstruction: { firstOperand: operand, connective: connective } });
-                EventBus.emit('render');
-            } else {
-                if (waitingConnective === connective) { 
-                    const firstAst = LogicParser.textToAst(firstOperand.formula);
-                    if (!firstAst) { addFeedback("Invalid first formula.", "error"); clearWffConstruction(); return; }
-                    const newAst = { type: 'binary', operator: connective, left: firstAst, right: droppedAst };
-                    addWff(newAst);
-                    clearWffConstruction(); 
-                } else { addFeedback("WFF Error: Connective mismatch.", "error"); clearWffConstruction(); }
-            }
-        }
-    },
-
-    clearWffConstruction: () => {
-        set({ wffConstruction: { firstOperand: null, connective: null } });
-        EventBus.emit('render');
-    },
-
-    setWffConstruction: (wffConstruction) => {
-        set({ wffConstruction });
-        EventBus.emit('render');
-    },
-
-    addWff: (formula) => {
-        const newWff = {
-            formula: typeof formula === 'string' ? LogicParser.textToAst(formula) : formula,
-            elementId: `wff-${Date.now()}`
-        };
-        set(state => ({ wffTray: [...state.wffTray, newWff] }));
-    },
-
-    removeWff: (elementId) => {
-        set(state => ({ wffTray: state.wffTray.filter(w => w.elementId !== elementId) }));
-    },
-
     addFeedback: (message, type = 'info') => {
-        set(state => {
-            const newHistory = [...state.feedbackHistory, { message, type }];
-            return {
-                feedbackHistory: newHistory,
-                currentFeedbackIndex: newHistory.length - 1
-            };
-        });
-        EventBus.emit('render');
-    },
-
-    previousFeedback: () => {
-        set(state => ({ currentFeedbackIndex: Math.max(0, state.currentFeedbackIndex - 1) }));
-        EventBus.emit('render');
-    },
-
-    nextFeedback: () => {
-        set(state => ({ currentFeedbackIndex: Math.min(state.feedbackHistory.length - 1, state.currentFeedbackIndex + 1) }));
-        EventBus.emit('render');
-    },
-
-    setWffTrayFontSize: (size) => {
-        set({ wffTrayFontSize: size });
-        EventBus.emit('render');
-    },
-
-    startSubproof: (type, assumption, additionalData = {}) => {
-        const { proofLines, subGoalStack } = get();
-        const currentScope = subGoalStack.length;
-        const subproofId = `subproof-${Date.now()}`;
-
-        let goal, forWff;
-        if (type === 'CP') {
-            goal = null; // User needs to derive the consequent
-            forWff = null; // This will be determined at the end
-        } else if (type === 'RAA') {
-            goal = '⊥'; // Contradiction
-            forWff = { type: 'negation', operand: assumption };
-        } else if (type === 'EE') {
-            goal = null; // User needs to derive a formula without the new constant
-            forWff = additionalData.existentialFormula;
-        }
-
-        const newSubGoal = {
-            scope: currentScope + 1,
-            type,
-            assumptionFormula: assumption,
-            goal,
-            forWff,
-            subproofId,
-            subLineLetterCode: 97, // 'a'
-        };
-
-        const assumptionLine = {
-            lineNumber: proofLines.length + 1,
-            formula: assumption,
-            justification: 'Assumption',
-            scopeLevel: currentScope + 1,
-            isProven: true,
-            isAssumption: true,
-            parentSubproofId: subproofId
-        };
-
+        const newFeedback = { message, type };
         set(state => ({
-            proofLines: [...state.proofLines, assumptionLine],
+            feedbackHistory: [...state.feedbackHistory, newFeedback],
+            currentFeedbackIndex: state.feedbackHistory.length
+        }));
+    },
+
+    showNextFeedback: () => {
+        set(state => ({
+            currentFeedbackIndex: Math.min(state.currentFeedbackIndex + 1, state.feedbackHistory.length - 1)
+        }));
+    },
+
+    showPreviousFeedback: () => {
+        set(state => ({
+            currentFeedbackIndex: Math.max(state.currentFeedbackIndex - 1, 0)
+        }));
+    },
+
+    // --- Subproof Management ---
+    
+    startSubproof: (type, assumptionFormula, additionalData = {}) => {
+        const { subGoalStack, currentScopeLevel } = get();
+        const newSubGoal = {
+            type,
+            scopeLevel: currentScopeLevel + 1,
+            assumptionFormula,
+            goalFormula: additionalData.goalFormula || null
+        };
+        
+        set(state => ({
             subGoalStack: [...state.subGoalStack, newSubGoal],
             currentScopeLevel: state.currentScopeLevel + 1
         }));
@@ -215,53 +112,50 @@ export const store = createStore((set, get) => ({
         EventBus.emit('subgoal:update');
     },
 
-    updateSubGoalStack: (newStack) => {
+    endSubproof: () => {
+        const { subGoalStack } = get();
+        
+        if (subGoalStack.length === 0) return;
+
+        // Get the most recent subproof and remove it
+        const currentSubproof = subGoalStack[subGoalStack.length - 1];
+        
+        set(state => ({
+            subGoalStack: state.subGoalStack.slice(0, -1),
+            currentScopeLevel: Math.max(0, state.currentScopeLevel - 1)
+        }));
+        EventBus.emit('proof:update');
+        EventBus.emit('subgoal:update');
+    },
+
+    // --- Getter Methods ---
+    
+    getCurrentSubgoal: () => {
+        const { subGoalStack } = get();
+        return subGoalStack.length > 0 
+            ? subGoalStack[subGoalStack.length - 1] 
+            : null;
+    },
+
+    getCurrentScopeLevel: () => {
+        return get().currentScopeLevel;
+    },
+
+    // --- Utility Methods ---
+    
+    setSubGoalStack: (newStack) => {
         set({ subGoalStack: newStack });
     },
-
-    setNextLineNumber: (n) => {
-        set({ nextLineNumberGlobal: n });
+    
+    incrementScopeLevel: () => {
+        set(state => ({ currentScopeLevel: state.currentScopeLevel + 1 }));
     },
 
-    setCurrentScopeLevel: (n) => {
-        set({ currentScopeLevel: n });
+    decrementScopeLevel: () => {
+        set(state => ({ currentScopeLevel: Math.max(0, state.currentScopeLevel - 1) }));
     },
 
-    setSelectedDraggable: (draggableData) => {
-        set({ selectedDraggable: draggableData });
-    },
-
-    clearSelectedDraggable: () => {
-        set({ selectedDraggable: null });
-    },
-
-    endSubproof: () => {
-        // ... Logic to end the current subproof ...
-        // This would involve checking the derivation, applying the rule (CP/RAA),
-        // and adding the resulting line to the parent scope.
-    },
-}));
-
-// --- Event Bus Subscriptions for Store Actions ---
-EventBus.on('problem:load', ({ set, number }) => {
-    store.getState().loadProblem(set, number);
-});
-
-EventBus.on('problem:next', () => {
-    const { set, number } = store.getState().currentProblem;
-    const nextProblemNumber = number + 1;
-    if (problemSets[set] && problemSets[set].problems[nextProblemNumber - 1]) {
-        store.getState().loadProblem(set, nextProblemNumber);
-    } else {
-        const nextSetNumber = set + 1;
-        if (problemSets[nextSetNumber]) {
-            store.getState().loadProblem(nextSetNumber, 1);
-        } else {
-            store.getState().addFeedback('You have completed all problems!', 'success');
-        }
+    resetProofState: () => {
+        set(initialState);
     }
-});
-
-EventBus.on('app:init', () => {
-    store.getState().loadProblem(1, 1);
-});
+}));

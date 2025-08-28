@@ -1,9 +1,9 @@
 import { store } from './store.js';
 import { EventBus } from './event-bus.js';
 import { problemSets } from './problems.js';
-import { ruleSet, handleRuleItemClick, handleRuleItemDragEnter, handleRuleItemDragLeave, handleDropOnRuleSlot } from './rules.js';
+import { Rules } from './rules.js';
 import { handleWffDragStart, handleGenericDragEnd, handleDropOnConnectiveHotspot, handleDropOnWffOutputTray, handleDropOnTrashCan, createDragHandler } from './drag-drop.js';
-import { initializeProof, handleSubproofToggle, handleDropOnProofArea, checkWinCondition } from './proof.js';
+import { initializeProof } from './proof.js';
 import { startTutorial, propositionalTutorialSteps, folTutorialSteps } from './tutorial.js';
 import { LogicParser } from './parser.js';
 import { handleDraggableClick, handleDroppableClick } from './click-to-move.js';
@@ -28,434 +28,310 @@ export function cacheDomElements() {
     helpIcon = document.getElementById('help-icon');
     subproofsArea = document.getElementById('subproofs-area');
     inferenceRulesArea = document.getElementById('inference-rules-area');
-    gameWrapper = document.getElementById('game-wrapper');
+
+    gameWrapper = document.getElementById('main-container');
 }
 
-// --- Central Render Function ---
-export function render() {
-    const state = store.getState();
+// --- Initialize UI Components ---
+export function initializeUI() {
+    // Set up the problem selector
+    const problemSelector = document.getElementById('problem-selector');
+    
+    if (problemSelector) {
+        problemSelector.innerHTML = '';
+        Object.entries(problemSets).forEach(([setNumber, set]) => {
+            const optGroup = document.createElement('optgroup');
+            optGroup.label = set.name;
+            
+            set.problems.forEach((problem, index) => {
+                const option = document.createElement('option');
+                option.value = `${setNumber}-${index + 1}`;
+                option.textContent = `#${index + 1}`;
+                optGroup.appendChild(option);
+            });
+            
+            problemSelector.appendChild(optGroup);
+        });
+    }
 
+    // Initialize the proof area
+    initializeProof();
+    
+    // Setup event listeners for proof lines (using the drop area)
+    if (proofList) {
+        const proofArea = document.getElementById('proof-area');
+        
+        proofArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            proofArea.classList.add('drag-over-proof-area');
+        });
+        
+        proofArea.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            proofArea.classList.remove('drag-over-proof-area');
+        });
+    }
+    
+    // Setup the WFF output tray
     if (wffOutputTray) {
-        wffOutputTray.style.setProperty('--wff-font-size-rem', `${state.wffTrayFontSize}rem`);
+        const dragHandler = createDragHandler('#wff-output-tray', 'drag-over-tray');
+        
+        wffOutputTray.addEventListener('dragover', dragHandler.dragover);
+        wffOutputTray.addEventListener('dragleave', dragHandler.dragleave);
+        wffOutputTray.addEventListener('drop', handleDropOnWffOutputTray);
     }
 
-    renderRules();
-    renderProofLines(state.proofLines);
-    updateProblemDisplay(state.premises, state.goalFormula, state.currentProblem.set, state.currentProblem.number);
-    updateSubGoalDisplay();
-    displayCurrentFeedback();
-    renderWffTray(state.wffTray);
-    updateConnectiveHotspots(state.wffConstruction);
-    if (checkWinCondition()) {
-        const { currentProblem } = store.getState();
-        EventBus.emit('game:win');
+    // Setup connectives
+    if (connectiveHotspots) {
+        connectiveHotspots.forEach(hotspot => {
+            const dragHandler = createDragHandler(`[data-connective="${hotspot.dataset.connective}"]`, 'drag-over-connective');
+            
+            hotspot.addEventListener('dragover', dragHandler.dragover);
+            hotspot.addEventListener('dragleave', dragHandler.dragleave);
+            hotspot.addEventListener('drop', handleDropOnConnectiveHotspot);
+        });
     }
-}
 
-function updateConnectiveHotspots(wffConstruction) {
-    if (!connectiveHotspots) return;
-    connectiveHotspots.forEach(spot => {
-        if (spot.classList.contains('waiting')) {
-            spot.classList.remove('waiting');
-            spot.textContent = spot.dataset.originalText || spot.dataset.connective;
-        }
-    });
+    // Setup trash can
+    if (trashCanDropArea) {
+        const dragHandler = createDragHandler('#trash-can-drop-area', 'trash-can-drag-over');
+        
+        trashCanDropArea.addEventListener('dragover', dragHandler.dragover);
+        trashCanDropArea.addEventListener('dragleave', dragHandler.dragleave);
+        trashCanDropArea.addEventListener('drop', handleDropOnTrashCan);
+    }
+    
+    // Setup zoom controls
+    if (zoomInWffBtn) {
+        zoomInWffBtn.addEventListener('click', () => {
+            store.getState().incrementWffTrayFontSize();
+        });
+    }
+    
+    if (zoomOutWffBtn) {
+        zoomOutWffBtn.addEventListener('click', () => {
+            store.getState().decrementWffTrayFontSize();
+        });
+    }
 
-    if (wffConstruction.firstOperand) {
-        const { connective, firstOperand } = wffConstruction;
-        const hotspot = document.querySelector(`.connective-hotspot[data-connective="${connective}"]`);
-        if (hotspot) {
-            hotspot.classList.add('waiting');
-            if (connective === '∀' || connective === '∃') {
-                hotspot.textContent = `${connective}${firstOperand.formula}(?)`;
-            } else {
-                hotspot.textContent = `${firstOperand.formula} ${connective} ?`;
+    // Setup help icon
+    if (helpIcon) {
+        helpIcon.addEventListener('click', () => {
+            startTutorial(propositionalTutorialSteps);
+        });
+    }
+    
+    // Setup feedback navigation buttons
+    if (prevFeedbackBtn) {
+        prevFeedbackBtn.addEventListener('click', () => {
+            store.getState().showPreviousFeedback();
+        });
+    }
+    
+    if (nextFeedbackBtn) {
+        nextFeedbackBtn.addEventListener('click', () => {
+            store.getState().showNextFeedback();
+        });
+    }
+
+    // Set up drag events
+    document.addEventListener('dragstart', handleWffDragStart);
+    document.addEventListener('dragend', handleGenericDragEnd);
+    
+    // Set up other UI events
+    const resetButton = document.getElementById('reset-button');
+    if (resetButton) {
+        resetButton.addEventListener('click', () => {
+            EventBus.emit('proof:reset');
+        });
+    }
+    
+    const nextProblemButton = document.getElementById('next-problem-button');
+    if (nextProblemButton) {
+        nextProblemButton.addEventListener('click', () => {
+            EventBus.emit('problem:next');
+        });
+    }
+
+    const tutorialButton = document.getElementById('tutorial-button');
+    if (tutorialButton) {
+        tutorialButton.addEventListener('click', () => {
+            startTutorial(propositionalTutorialSteps);
+        });
+    }
+
+    const solutionButton = document.getElementById('solution-button');
+    if (solutionButton) {
+        solutionButton.addEventListener('click', () => {
+            EventBus.emit('solution:show');
+        });
+    }
+
+    // Problem selector
+    if (problemSelector) {
+        problemSelector.addEventListener('change', (e) => {
+            const [setNumber, problemNumber] = e.target.value.split('-').map(Number);  
+            if (!isNaN(setNumber) && !isNaN(problemNumber)) {
+                EventBus.emit('problem:load', { set: setNumber, number: problemNumber });
+            }
+        });
+    }
+
+    // Setup subproof buttons
+    document.addEventListener('click', (e) => {
+        // Handle subproof creation buttons
+        if (e.target.closest('.subproof-start-btn')) {
+            const type = e.target.closest('.subproof-start-btn').dataset.type;
+            
+            if (type === 'RAA') {
+                const formula = prompt("Enter the formula to prove by contradiction:");
+                if (formula) {
+                    EventBus.emit('proof:startRAA', formula);
+                }
+            } else if (type === 'CP') {
+                const conditional = prompt("Enter the conditional to prove:");
+                if (conditional) {
+                    EventBus.emit('proof:startConditionalIntroduction', conditional);
+                }
             }
         }
-    }
-}
-
-// --- UI Update Functions ---
-
-function renderRules() {
-    subproofsArea.innerHTML = '<h2>Subproofs</h2>';
-    inferenceRulesArea.innerHTML = '<h2>Inference Rules</h2>';
-
-    for (const ruleKey in ruleSet) {
-        const rule = ruleSet[ruleKey];
-        const ruleElement = createRuleElement(ruleKey, rule);
-        if (rule.isSubproof) {
-            subproofsArea.appendChild(ruleElement);
-        } else {
-            inferenceRulesArea.appendChild(ruleElement);
-        }
-    }
-    // Re-add event listeners to the newly created rule elements
-    addRuleEventListeners();
-}
-
-function createRuleElement(ruleKey, rule) {
-    const ruleElement = document.createElement('div');
-    ruleElement.className = 'rule-item';
-    ruleElement.dataset.rule = ruleKey;
-    ruleElement.dataset.premises = rule.premises;
-    if (rule.logicType) {
-        ruleElement.dataset.logicType = rule.logicType;
-    }
-    ruleElement.setAttribute('role', 'button');
-    ruleElement.setAttribute('tabindex', '0');
-    ruleElement.textContent = rule.name;
-
-    const slotsContainer = document.createElement('div');
-    slotsContainer.className = 'rule-slots';
-    rule.slots.forEach((slot, index) => {
-        const slotElement = document.createElement('div');
-        slotElement.className = 'drop-slot';
-        slotElement.dataset.premiseIndex = index;
-        slotElement.dataset.placeholder = slot.placeholder;
-        if (slot.expectedPattern) {
-            slotElement.dataset.expectedPattern = slot.expectedPattern;
-        }
-        slotElement.setAttribute('role', 'region');
-        slotElement.setAttribute('aria-dropeffect', 'copy');
-        slotElement.textContent = slot.placeholder;
-        slotsContainer.appendChild(slotElement);
-    });
-
-    ruleElement.appendChild(slotsContainer);
-    return ruleElement;
-}
-
-function renderProofLines(proofLines) {
-    proofList.innerHTML = ''; // Clear existing lines
-    proofLines.forEach(lineData => {
-        const listItem = createProofLineElement(lineData);
-        proofList.appendChild(listItem);
     });
 }
 
-function createProofLineElement(lineData) {
-    const listItem = document.createElement('li');
-    Object.assign(listItem.dataset, {
-        lineNumber: lineData.lineNumber,
-        scopeLevel: lineData.scopeLevel,
-        isAssumption: lineData.isAssumption,
-        isShowLine: lineData.isShowLine,
-        isProven: lineData.isProven
+// --- Event Listener Setup ---
+export function addEventListeners() {
+    cacheDomElements();
+    initializeUI();
+    
+    // Setup event listeners that depend on the store
+    EventBus.on('render', () => {
+        renderProofLines();
     });
 
-    if (lineData.isShowLine) {
-        listItem.classList.add('show-line');
-        listItem.dataset.subproofId = lineData.subproofId;
-    }
+    EventBus.on('feedback:show', (data) => {
+        showFeedback(data.message, data.isError); 
+    });
 
-    if (lineData.scopeLevel > 0) {
-        listItem.classList.add('subproof-line');
-        listItem.style.marginLeft = `${lineData.scopeLevel * 1.5}rem`;
-        if (lineData.parentSubproofId) {
-            listItem.dataset.parentSubproofId = lineData.parentSubproofId;
-            if (lineData.isAssumption) {
-                listItem.classList.add('subproof-assumption');
-            }
-        }
-    }
-
-    const formulaText = LogicParser.astToText(lineData.formula);
-    const formulaDiv = document.createElement('span');
-    formulaDiv.className = 'formula';
-    formulaDiv.dataset.formula = formulaText;
-    formulaDiv.draggable = true;
-    formulaDiv.appendChild(renderFormulaWithDraggableVars(formulaText));
-
-    listItem.innerHTML = `<span class="line-number">${lineData.lineNumber}</span>`;
-    listItem.appendChild(formulaDiv);
-    listItem.innerHTML += `<span class="justification">${lineData.justification}</span>`;
-
-    return listItem;
+    EventBus.on('problem:loaded', () => {
+        console.log('problem:loaded event received in ui.js');
+        updateProblemDisplay();
+    });
+    
+    EventBus.on('subgoal:update', () => {
+        updateSubGoalDisplay();
+    });
 }
 
+// --- UI Render Functions ---
+export function renderProofLines() {
+    const { proofLines } = store.getState();
+    
+    if (!proofList) return;
+    
+    proofList.innerHTML = '';
 
-export function updateProblemDisplay(premises, goalFormula, set, number) {
-    const problemSetInfo = problemSets[set];
-    gameTitle.textContent = `Natural Deduction Contraption - ${problemSetInfo.name} #${number}`;
+    // Sort the lines by scope level to ensure proper nesting
+    const orderedLines = [...proofLines].sort((a, b) => a.scopeLevel - b.scopeLevel);
+    
+    orderedLines.forEach(line => {
+        const li = document.createElement('li');
+        li.className = `proof-line`;
+        li.dataset.lineNumber = line.lineNumber;
+        li.dataset.scopeLevel = line.scopeLevel;
+        
+        // Handle different types of lines
+        if (line.isAssumption) {
+            li.classList.add('assumption');
+        }
+        
+        // Add the line content
+        const lineNumberSpan = document.createElement('span');
+        lineNumberSpan.className = 'line-number';
+        lineNumberSpan.textContent = line.lineNumber;
+        
+        const formulaSpan = document.createElement('span');
+        formulaSpan.className = 'formula';
+        formulaSpan.textContent = LogicParser.astToText(line.formula);
+        
+        const justificationSpan = document.createElement('span');
+        justificationSpan.className = 'justification';
+        justificationSpan.textContent = line.justification || '';
+        
+        li.appendChild(lineNumberSpan);
+        li.appendChild(formulaSpan);
+        li.appendChild(justificationSpan);
+        
+        proofList.appendChild(li);
+    });
+}
+
+export function showFeedback(message, isError = false) {
+    if (!proofFeedbackDiv) return;
+    
+    const feedbackElement = document.createElement('div');
+    feedbackElement.className = `alert ${isError ? 'alert-danger' : 'alert-success'}`;
+    feedbackElement.textContent = message;
+    
+    proofFeedbackDiv.appendChild(feedbackElement);
+    
+    // Auto-remove after delay
+    setTimeout(() => {
+        if (feedbackElement.parentNode) {
+            feedbackElement.parentNode.removeChild(feedbackElement);
+        }
+    }, 5000);
+}
+
+// --- Display Updates ---
+function updateProblemDisplay() {
+    console.log('updateProblemDisplay called in ui.js');
+    const { premises, goalFormula, currentProblem } = store.getState();
+    const problemSetInfo = problemSets[currentProblem.set];
+    gameTitle.textContent = `Natural Deduction Contraption - ${problemSetInfo.name} #${currentProblem.number}`;
 
     const problemInfoDiv = document.getElementById('proof-problem-info');
-    let problemHtml = '';
-    premises.forEach((p, i) => {
-        // Add defensive check for undefined/premises 
-        if (p && p.formula) {
-            problemHtml += `<div class="proof-header">Premise ${i + 1}: <span>${LogicParser.astToText(p.formula)}</span></div>`;
+    if (problemInfoDiv) {
+        let problemHtml = '';
+        premises.forEach((p, i) => {
+            if (p && p.formula) {
+                problemHtml += `<div class="proof-header">Premise ${i + 1}: <span>${LogicParser.astToText(p.formula)}</span></div>`;
+            }
+        });
+        if (goalFormula && goalFormula.ast) {
+            problemHtml += `<div class="proof-goal">Prove: <span>${LogicParser.astToText(goalFormula.ast)}</span></div>`;
         }
-    });
-    // Add defensive check for goalFormula
-    if (goalFormula && goalFormula.ast) {
-        problemHtml += `<div class="proof-goal">Prove: <span>${LogicParser.astToText(goalFormula.ast)}</span></div>`;
+        problemInfoDiv.innerHTML = problemHtml;
     }
-    problemInfoDiv.innerHTML = problemHtml;
 }
 
 function updateSubGoalDisplay() {
-    const { subGoalStack } = store.getState();
+    const { subGoalStack, currentScopeLevel } = store.getState();
+    
+    if (!subGoalDisplayContainer) return;
+    
+    // Clear the container
     subGoalDisplayContainer.innerHTML = '';
+    
     if (subGoalStack.length > 0) {
-        const { scope, type, assumptionFormula, goal, forWff } = subGoalStack[subGoalStack.length - 1];
-        let goalText = goal;
-        if (type === "RAA") {
-            goalText = "a contradiction (ψ and ~ψ)";
+        const subgoalElement = document.createElement('div');
+        subgoalElement.className = 'subgoal-display';
+        
+        const currentSubGoal = subGoalStack[subGoalStack.length - 1];
+        subgoalElement.innerHTML = `<strong>Current Subproof:</strong> ${currentSubGoal.type}`;
+        if (currentSubGoal.assumptionFormula) {
+            subgoalElement.innerHTML += ` (Assuming: ${LogicParser.astToText(currentSubGoal.assumptionFormula)})`;
         }
-        subGoalDisplayContainer.innerHTML = `<div class="subproof-goal-display">Current Sub-Goal (Scope ${scope}, Type: ${type}): <br>Assume: <span>${assumptionFormula}</span><br>Derive: <span>${goalText}</span> (to prove <span>${forWff}</span>)</div>`;
+        
+        subGoalDisplayContainer.appendChild(subgoalElement);
+    } else {
+        const noSubgoalElement = document.createElement('div');
+        noSubgoalElement.className = 'no-subgoal';
+        noSubgoalElement.textContent = 'No active subproof';
+        subGoalDisplayContainer.appendChild(noSubgoalElement);
     }
 }
 
-function displayCurrentFeedback() {
-    const { feedbackHistory, currentFeedbackIndex } = store.getState();
-    if (!proofFeedbackDiv || feedbackHistory.length === 0) {
-        if (proofFeedbackDiv) {
-            proofFeedbackDiv.textContent = "";
-            proofFeedbackDiv.className = 'text-center font-bold flex-grow mx-2';
-        }
-        updateFeedbackNavButtons();
-        return;
-    }
-
-    const { message, type } = feedbackHistory[currentFeedbackIndex];
-
-    proofFeedbackDiv.textContent = message;
-    proofFeedbackDiv.className = 'text-center font-bold flex-grow mx-2'; // Reset classes
-
-    if (type === 'error') proofFeedbackDiv.classList.add('text-red-400');
-    else if (type === 'warning') proofFeedbackDiv.classList.add('text-yellow-400');
-    else if (type === 'success') proofFeedbackDiv.classList.add('text-green-400');
-
-    updateFeedbackNavButtons();
-}
-
-function updateFeedbackNavButtons() {
-    const { currentFeedbackIndex, feedbackHistory } = store.getState();
-    if (!prevFeedbackBtn || !nextFeedbackBtn) return;
-    prevFeedbackBtn.disabled = currentFeedbackIndex <= 0;
-    nextFeedbackBtn.disabled = currentFeedbackIndex >= feedbackHistory.length - 1;
-}
-
-function renderFormulaWithDraggableVars(formulaString) {
-    const fragment = document.createDocumentFragment();
-    const parts = formulaString.split(/([(),~∧∨→↔∀∃])|([xyz])/).filter(p => p);
-
-    parts.forEach(part => {
-        if (/^[xyz]$/.test(part)) {
-            const span = document.createElement('span');
-            span.className = 'draggable-var fol-variable';
-            span.draggable = true;
-            span.dataset.type = 'fol-variable';
-            span.dataset.symbol = part;
-            span.textContent = part;
-            fragment.appendChild(span);
-        } else {
-            fragment.appendChild(document.createTextNode(part));
-        }
-    });
-    return fragment;
-}
-
-function renderWffTray(wffTray) {
-    console.log('[renderWffTray] Rendering WFF tray with formulas:', wffTray);
-    wffOutputTray.innerHTML = '';
-    wffTray?.forEach(wffData => {
-        const item = document.createElement('div');
-        item.className = 'formula';
-        item.innerHTML = '';
-        const formulaText = LogicParser.astToText(wffData.formula);
-        item.appendChild(renderFormulaWithDraggableVars(formulaText));
-
-        item.dataset.formula = formulaText;
-        item.id = wffData.elementId;
-        item.draggable = true;
-
-        wffOutputTray.appendChild(item);
-    });
-}
-
-// --- Event Listeners ---
-export function addEventListeners() {
-    cacheDomElements();
-
-    helpIcon.addEventListener('click', () => {
-        const { currentProblem } = store.getState();
-        const currentProblemSet = currentProblem.set;
-        if (currentProblemSet === 1) {
-            startTutorial(propositionalTutorialSteps);
-        } else if (currentProblemSet === 2) {
-            startTutorial(folTutorialSteps);
-        }
-    });
-
-    draggableVariables.forEach(v => {
-        v.addEventListener('dragstart', handleWffDragStart);
-        v.addEventListener('dragend', handleGenericDragEnd);
-        v.addEventListener('click', handleDraggableClick);
-    });
-
-    connectiveHotspots.forEach(spot => {
-        const handler = createDragHandler('.connective-hotspot', 'drag-over');
-        spot.addEventListener('dragover', handler.dragover);
-        spot.addEventListener('dragleave', handler.dragleave);
-        spot.addEventListener('drop', handleDropOnConnectiveHotspot);
-        spot.addEventListener('click', (e) => handleDroppableClick(e, handleDropOnConnectiveHotspot));
-        spot.dataset.originalText = spot.textContent;
-    });
-
-    const wffOutputTrayHandler = createDragHandler('#wff-output-tray', 'drag-over-tray');
-    wffOutputTray.addEventListener('dragstart', handleWffDragStart);
-    wffOutputTray.addEventListener('dragend', handleGenericDragEnd);
-    wffOutputTray.addEventListener('dragover', wffOutputTrayHandler.dragover);
-    wffOutputTray.addEventListener('dragleave', wffOutputTrayHandler.dragleave);
-    wffOutputTray.addEventListener('drop', handleDropOnWffOutputTray);
-    wffOutputTray.addEventListener('click', handleDraggableClick);
-
-    if (trashCanDropArea) {
-        const trashCanHandler = createDragHandler('#trash-can-drop-area', 'trash-can-drag-over');
-        trashCanDropArea.addEventListener('dragover', trashCanHandler.dragover);
-        trashCanDropArea.addEventListener('dragleave', trashCanHandler.dragleave);
-        trashCanDropArea.addEventListener('drop', handleDropOnTrashCan);
-        trashCanDropArea.addEventListener('click', (e) => handleDroppableClick(e, handleDropOnTrashCan));
-    }
-
-    const proofListHandler = createDragHandler('ol#proof-lines', 'drag-over-proof');
-    proofList.addEventListener('dragover', proofListHandler.dragover);
-    proofList.addEventListener('dragleave', proofListHandler.dragleave);
-    proofList.addEventListener('click', (e) => {
-        if (e.target.closest('.formula')) {
-            handleDraggableClick(e);
-        } else {
-            handleDroppableClick(e, handleDropOnProofArea);
-        }
-    });
-
-    addRuleEventListeners();
-
-    document.querySelectorAll('.accordion-header').forEach(header => {
-        header.addEventListener('click', () => {
-            const content = header.nextElementSibling;
-            header.classList.toggle('closed');
-            content.classList.toggle('hidden');
-        });
-    });
-
-    prevFeedbackBtn.addEventListener('click', () => EventBus.emit('feedback:prev'));
-    nextFeedbackBtn.addEventListener('click', () => EventBus.emit('feedback:next'));
-    zoomInWffBtn.addEventListener('click', () => EventBus.emit('wff:zoom', 1));
-    zoomOutWffBtn.addEventListener('click', () => EventBus.emit('wff:zoom', -1));
-
-    initializeProof();
-
-    // --- Event Bus Subscriptions ---
-    EventBus.on('render', render);
-    EventBus.on('feedback:show', (feedback) => {
-        store.getState().addFeedback(feedback.message, feedback.isError ? 'error' : 'success');
-    });
-    EventBus.on('feedback:prev', () => {
-        store.getState().previousFeedback();
-    });
-    EventBus.on('feedback:next', () => {
-        store.getState().nextFeedback();
-    });
-    EventBus.on('wff:zoom', (direction) => {
-        const currentSize = store.getState().wffTrayFontSize;
-        const newSize = Math.max(0.5, Math.min(2.5, currentSize + direction * 0.1));
-        store.getState().setWffTrayFontSize(newSize);
-    });
-
-    EventBus.on('wff:add', (wffData) => {
-        store.getState().addWff(wffData);
-    });
-    EventBus.on('wff:remove', (wffData) => {
-        store.getState().removeWff(wffData.elementId);
-    });
-    EventBus.on('proof:update', render);
-    EventBus.on('subgoal:update', updateSubGoalDisplay);
-    EventBus.on('problem:loaded', render);
-    EventBus.on('feedback:clear', () => {
-        store.dispatch({ type: 'CLEAR_FEEDBACK' });
-        displayCurrentFeedback();
-    });
-    EventBus.on('game:win', () => {
-        const { currentProblem } = store.getState();
-        const message = `Congratulations! You solved ${problemSets[currentProblem.set].name} #${currentProblem.number}.`;
-        if (proofFeedbackDiv) {
-            proofFeedbackDiv.textContent = message;
-            proofFeedbackDiv.className = 'text-center font-bold flex-grow mx-2 text-green-400';
-        }
-        if (!document.querySelector("#next")) {
-            const nextProblemButton = document.createElement('button');
-            nextProblemButton.textContent = 'Next Problem →';
-            nextProblemButton.id = "next";
-            nextProblemButton.className = 'bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded m-2';
-            nextProblemButton.onclick = () => {
-                EventBus.emit('problem:next');
-                nextProblemButton.remove();
-            };
-            if (proofFeedbackDiv && proofFeedbackDiv.parentElement) {
-                proofFeedbackDiv.parentElement.appendChild(nextProblemButton);
-            }
-        }
-    }
-    );
-    EventBus.on('ui:resetHotspots', () => {
-        store.getState().setWffConstruction({ firstOperand: null, connective: null });
-    });
-    EventBus.on('rules:fillSlot', ({ slot, data }) => {
-        slot.textContent = data.line ? `${data.line}: ${data.formula}` : data.formula;
-        slot.classList.remove('text-slate-400', 'italic');
-        Object.assign(slot.dataset, data);
-    });
-
-    EventBus.on('rules:clearSlot', (slot) => {
-        slot.textContent = slot.dataset.placeholder || "Drop here...";
-        slot.classList.add('text-slate-400', 'italic');
-        delete slot.dataset.formula;
-        delete slot.dataset.line;
-        delete slot.dataset.source;
-        delete slot.dataset.elementId;
-    });
-    EventBus.on('rules:activate', (ruleElement) => {
-        document.querySelectorAll('.rule-item').forEach(item => item.classList.remove('active'));
-        ruleElement.classList.add('active');
-    });
-    EventBus.on('rules:deactivate', () => {
-        document.querySelectorAll('.rule-item').forEach(item => item.classList.remove('active'));
-    });
-}
-
-function addRuleEventListeners() {
-    document.querySelectorAll('.rule-item').forEach(item => {
-        item.addEventListener('click', (e) => {
-            if (e.target.closest('.drop-slot')) {
-                handleDroppableClick(e, (e) => handleDropOnRuleSlot(e, item));
-            } else {
-                handleRuleItemClick(e);
-            }
-        });
-        item.addEventListener('dragenter', handleRuleItemDragEnter);
-        item.addEventListener('dragleave', handleRuleItemDragLeave);
-        item.querySelectorAll('.drop-slot').forEach(slot => {
-            const slotHandler = createDragHandler('.drop-slot', 'drag-over');
-            slot.addEventListener('dragover', slotHandler.dragover);
-            slot.addEventListener('dragleave', slotHandler.dragleave);
-            slot.addEventListener('drop', (e) => handleDropOnRuleSlot(e, item));
-        });
-    });
-}
-
-
-// Initial setup
+// --- Initialize on DOM Load ---
 document.addEventListener('DOMContentLoaded', () => {
     addEventListeners();
-    EventBus.emit('app:init');
 });
-
-
-// --- Main UI Initialization ---
-export function initializeUI() {
-    addEventListeners();
-    render(); // Initial render
-}

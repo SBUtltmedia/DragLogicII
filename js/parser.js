@@ -190,6 +190,15 @@ export const LogicParser = (() => {
                 throw new Error(`Parsing Error: ${e.message} in formula: "${text}"`);
             }
         },
+        
+        validateFormula: (formulaText) => {
+            try {
+                const ast = LogicParser.textToAst(formulaText);
+                return { valid: true, ast };
+            } catch (error) {
+                return { valid: false, error: error.message };
+            }
+        },
         astToText: (ast) => {
              try {
                 return fromAst(ast);

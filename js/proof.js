@@ -24,9 +24,9 @@ function isAssumption(lineItem) {
  * This is the single, authoritative way to add a line to the proof.
  * @returns {object} The line data object that was created.
  */
-export function addProofLine(formula, justification, scopeLevel, isAssumptionFlag = false, isShowLineFlag = false) {
-    const { nextLineNumberGlobal, subGoalStack, proofLines, currentScopeLevel } = store.getState();
-    
+export function addProofLine(formula, justification, scopeLevel, isAssumptionFlag = false,
+ isShowLineFlag = false) {                                                                    const { nextLineNumberGlobal, subGoalStack, proofLines, currentScopeLevel } = store.ge
+tState();                                                                                     
     let formulaAst;
     let cleanFormula;
     let formulaForParsing;
@@ -46,320 +46,179 @@ export function addProofLine(formula, justification, scopeLevel, isAssumptionFla
 
     // Prevent adding duplicate proven lines in the same scope
     if (!isShowLineFlag && !isAssumptionFlag) {
-        const existingLines = proofLines.filter(line => line.scopeLevel === scopeLevel && line.isProven);
-        for (const line of existingLines) {
-            const existingAst = line.formula;
-            if (existingAst && formulaAst && LogicParser.areAstsEqual(existingAst, formulaAst)) {
-                EventBus.emit('feedback:show', { message: "This line already exists and is proven in the current scope.", isError: true });
+        const existingLines = proofLines.filter(line => line.scopeLevel === scopeLevel && 
+line.isProven);                                                                                   for (const line of existingLines) {
+
+            if (LogicParser.areAstsEqual(formulaAst, line.formula)) {
+                EventBus.emit('feedback:show', { 
+                    message: `Formula already exists in current scope.`, 
+                    isError: true 
+                });
                 return null;
             }
         }
     }
 
-    let displayLineStr, dataLineId;
-    if (scopeLevel === 0) {
-        displayLineStr = `${nextLineNumberGlobal}.`;
-        dataLineId = `${nextLineNumberGlobal}`;
-        store.getState().setNextLineNumber(nextLineNumberGlobal + 1);
-    } else {
-        const activeSubProof = { ...subGoalStack[subGoalStack.length - 1] };
-        if (!activeSubProof) {
-            EventBus.emit('feedback:show', { message: "Proof Error: No active subproof!", isError: true });
-            return null;
-        }
-        const subLetter = String.fromCharCode(activeSubProof.subLineLetterCode);
-        displayLineStr = `${activeSubProof.parentLineDisplay}.${subLetter}`;
-        dataLineId = displayLineStr;
-
-        const newSubGoalStack = [
-            ...subGoalStack.slice(0, subGoalStack.length - 1),
-            { ...activeSubProof, subLineLetterCode: activeSubProof.subLineLetterCode + 1 }
-        ];
-        store.getState().updateSubGoalStack(newSubGoalStack);
-    }
-
-    const lineData = {
-        lineNumber: dataLineId,
-        formula: formulaAst,  // Store the AST instead of text string for consistent internal operations
+    const newLine = {
+        id: Date.now(),
+        lineNumber: isShowLineFlag ? 'Show' : nextLineNumberGlobal,
+        formula: formulaAst,
+        cleanFormula,
         justification,
         scopeLevel,
         isAssumption: isAssumptionFlag,
+        isProven: !isAssumptionFlag, // Assumptions are not proven yet
         isShowLine: isShowLineFlag,
-        isProven: !isShowLineFlag && !isAssumptionFlag,
-        subproofId: isShowLineFlag ? `subproof-${dataLineId.replace(/\./g, '-')}` : null,
-        parentSubproofId: scopeLevel > 0 ? subGoalStack[subGoalStack.length - 1]?.subproofId : null
     };
 
-    store.getState().addProofLine(lineData);
-    if (checkWinCondition()) {
-        EventBus.emit('game:win');
+    store.getState().addProofLine(newLine);
+    
+    if (!isShowLineFlag) {
+        store.getState().setNextLineNumberGlobal(nextLineNumberGlobal + 1);
     }
-    return lineData;
+    
+    EventBus.emit('proof:lineAdded', newLine);
+    return newLine;
 }
 
 // --- Subproof Management ---
 
-export function startRAA(wffToProve) {
-    console.log("startRAA called with:", wffToProve);
-    const { currentScopeLevel, subGoalStack } = store.getState();
-    const goalAst = LogicParser.textToAst(wffToProve);
-    if (!goalAst) {
-        EventBus.emit('feedback:show', { message: "Cannot start RAA: Invalid formula.", isError: true });
-        return;
-    }
-
-    const showLineItem = addProofLine(`Show: ${wffToProve}`, "Goal (RAA)", currentScopeLevel, false, true);
-    if (!showLineItem) {
-        return;
-    }
-
-    const subproofId = showLineItem.subproofId;
-    const showLineFullId = showLineItem.lineNumber;
-    const newScopeLevel = currentScopeLevel + 1;
-    store.getState().setCurrentScopeLevel(newScopeLevel);
-
-
-    const assumptionAst = { type: 'negation', operand: goalAst };
-    const assumptionFormula = LogicParser.astToText(assumptionAst);
-
-    const newSubGoal = {
-        forWff: wffToProve,
-        type: "RAA",
-        assumptionFormula: assumptionFormula,
-        showLineFullId: showLineFullId,
-        parentLineDisplay: showLineFullId,
-        subLineLetterCode: 97,
-        scope: newScopeLevel,
-        assumptionLineFullId: "",
-        subproofId: subproofId
-    };
-
-    const newSubGoalStack = [...subGoalStack, newSubGoal];
-    store.getState().updateSubGoalStack(newSubGoalStack);
-
-    const assumptionLineItem = addProofLine(assumptionFormula, "Assumption (RAA)", newScopeLevel, true);
-    if (assumptionLineItem) {
-        const latestSubGoal = store.getState().subGoalStack.slice(-1)[0];
-        latestSubGoal.assumptionLineFullId = assumptionLineItem.lineNumber;
-    }
-    EventBus.emit('subgoal:update');
-    EventBus.emit('feedback:show', { message: `Subproof (RAA): Assume ${assumptionFormula}. Derive a contradiction.`, isError: false });
-}
-
-export function startConditionalIntroduction(conditionalAst) {
+export function startSubproof(type, assumptionFormula, goalFormula = null) {
     const { currentScopeLevel } = store.getState();
-    const conditionalFormulaText = LogicParser.astToText(conditionalAst);
-
-    const showLineData = addProofLine(`Show: ${conditionalFormulaText}`, "Goal (→I)", currentScopeLevel, false, true);
-    if (!showLineData) return;
-
-    store.getState().startSubproof('CP', conditionalAst);
-}
-
-export function startExistentialInstantiation(existentialFormula, assumptionFormula, newVar) {
-    const { currentScopeLevel } = store.getState();
-
-    // 1. Add the "Show" line for the existential formula
-    const showLineData = addProofLine(`Show: ${existentialFormula}`, "Goal (EI)", currentScopeLevel, false, true);
-    if (!showLineData) return;
-
-    // 2. Update state for the new subproof
-    const newScopeLevel = currentScopeLevel + 1;
-    store.getState().setCurrentScopeLevel(newScopeLevel);
-
-    const newSubGoal = {
-        goal: null, // In EI, the goal is to re-derive the same formula
-        forWff: existentialFormula,
-        type: "EI",
-        assumptionFormula: assumptionFormula,
-        showLineFullId: showLineData.lineNumber,
-        parentLineDisplay: showLineData.lineNumber,
-        subLineLetterCode: 97, // 'a'
-        scope: newScopeLevel,
-        assumptionLineFullId: "",
-        subproofId: showLineData.subproofId,
-        newInstanceVar: newVar
+    const subGoalDetails = {
+        type,
+        scopeLevel: currentScopeLevel + 1,
+        assumptionFormula: LogicParser.textToAst(assumptionFormula),
+        goalFormula: goalFormula ? LogicParser.textToAst(goalFormula) : null
     };
-    store.getState().updateSubGoalStack([...store.getState().subGoalStack, newSubGoal]);
-
-    // 3. Add the assumption line
-    const assumptionLineData = addProofLine(assumptionFormula, `Assumption (EI, ${newVar})`, newScopeLevel, true);
-    if (assumptionLineData) {
-        const updatedStack = store.getState().subGoalStack;
-        updatedStack[updatedStack.length - 1].assumptionLineFullId = assumptionLineData.lineNumber;
-        store.getState().updateSubGoalStack(updatedStack);
-    }
-
-    EventBus.emit('feedback:show', { message: `Subproof (EI): Assume ${assumptionFormula}. Derive the original formula.`, isError: false });
-    EventBus.emit('subgoal:update');
+    
+    store.getState().startSubproof(type, assumptionFormula, { goalFormula });
+    EventBus.emit('subproof:started', subGoalDetails);
 }
 
-function dischargeRAA({ subproof, line1, line2 }) {
-    if (!subproof || subproof.type !== "RAA") return;
+export function endSubproof() {
+    const { subGoalStack } = store.getState();
+    if (subGoalStack.length === 0) {
+        EventBus.emit('feedback:show', { 
+            message: 'No active subproof to end.', 
+            isError: true 
+        });
+        return;
+    }
 
+    // Here would be logic to validate that the last subproof is complete
+    // In a real implementation, this would check if the assumption leads to the goal
+    
+    store.getState().endSubproof();
+    EventBus.emit('subproof:ended');
+}
+
+// --- Rule Application ---
+
+export function applyRule(ruleName, premiseLineNumbers) {
     const { proofLines } = store.getState();
-    const dischargedSubproof = store.getState().subGoalStack.pop();
-    const parentScopeLevel = dischargedSubproof.scope - 1;
-
-    const showLineIndex = proofLines.findIndex(line => line.lineNumber === dischargedSubproof.showLineFullId);
-    if (showLineIndex === -1) {
-        store.getState().setCurrentScopeLevel(parentScopeLevel);
-        EventBus.emit('subgoal:update');
-        addProofLine(dischargedSubproof.forWff, `RAA ${dischargedSubproof.assumptionLineFullId} (${line1},${line2})`, parentScopeLevel);
-        return;
-    }
-
-    const justificationText = `RAA ${dischargedSubproof.assumptionLineFullId} (${line1}, ${line2})`;
-
-    const updatedProofLines = [...proofLines];
-    const showLine = updatedProofLines[showLineIndex];
-
-    showLine.formula = dischargedSubproof.forWff;
-    showLine.justification = justificationText;
-    showLine.isProven = true;
-    showLine.isShowLine = false;
-    showLine.isAssumption = false;
-
-    store.getState().setProofLines(updatedProofLines);
-    store.getState().setCurrentScopeLevel(parentScopeLevel);
-    EventBus.emit('subgoal:update');
-    EventBus.emit('feedback:show', { message: `Discharged RAA for ${dischargedSubproof.forWff}.`, isError: false });
-}
-
-function dischargeEE({ subproof, conclusionLineId }) {
-    if (!subproof || subproof.type !== "EE") return;
-
-    const { proofLines } = store.getState();
-    const dischargedSubproof = store.getState().subGoalStack.pop();
-    const parentScopeLevel = dischargedSubproof.scope - 1;
-
-    const conclusionLine = proofLines.find(line => line.lineNumber === conclusionLineId);
-    if (!conclusionLine) {
-        store.getState().addFeedback('EE error: conclusion line not found.', 'error');
-        return;
-    }
-
-    // A more robust implementation would check that the constant from the assumption does not appear in the conclusion.
-
-    addProofLine(conclusionLine.formula, `EE ${dischargedSubproof.forWff.lineNumber}, ${subproof.assumptionLineFullId}-${conclusionLineId}`, parentScopeLevel);
-
-    store.getState().setCurrentScopeLevel(parentScopeLevel);
-    EventBus.emit('subgoal:update');
-    EventBus.emit('feedback:show', { message: `Discharged EE for ${LogicParser.astToText(conclusionLine.formula)}.`, isError: false });
-}
-
-export function handleDropOnProofArea(event) {
-    event.preventDefault();
-    console.log("handleDropOnProofArea called");
-    const jsonData = event.dataTransfer.getData('application/json');
-    if (!jsonData) {
-        return;
-    }
-    const data = JSON.parse(jsonData);
-    console.log("Drop data:", data);
-    const targetLi = event.target.closest('li[data-line-number]');
-
-    // If dropped on the main proof area (not a specific line) and it's from the WFF constructor
-    if (!targetLi && (data.source === 'wff-constructor' || data.source === 'wff-output-tray')) {
-        startRAA(data.formula);
-        if (data.source === 'wff-output-tray') {
-            EventBus.emit('wff:remove', { elementId: data.elementId });
-        }
-        return;
-    }
-
-    if (targetLi && targetLi.dataset.isShowLine === 'true' && data.sourceType === 'proof-line-formula') {
-        const subproofId = targetLi.dataset.subproofId;
-        const { subGoalStack } = store.getState();
-        const subproof = subGoalStack.find(sp => sp.subproofId === subproofId);
-        if (subproof && subproof.type === 'EE') {
-            EventBus.emit('proof:dischargeSubproof', { type: 'EE', subproof: subproof, conclusionLineId: data.lineId });
-            return;
-        }
-    }
-
-    // Handle reiteration
-    if (data.sourceType === 'proof-line-formula') {
-        const { formula, lineId, scopeLevel } = data;
-        if (scopeLevel <= store.getState().currentScopeLevel) {
-            addProofLine(formula, `Re ${lineId}`, store.getState().currentScopeLevel);
-        } else {
-            EventBus.emit('feedback:show', { message: "Reiteration Error: Cannot reiterate from inner scope.", isError: true });
-        }
+    
+    // Validate that we have the right number of premises
+    if (premiseLineNumbers.length === 0) {
+        EventBus.emit('feedback:show', { 
+            message: 'At least one premise is required for rule application.', 
+            isError: true 
+        });
+        return false;
     }
     
-    document.getElementById('proof-lines').classList.remove('drag-over-proof');
-}
-
-EventBus.on('proof:dischargeRAA', dischargeRAA);
-EventBus.on('proof:dischargeSubproof', (subproof) => {
-    if (subproof.type === 'RAA') {
-        dischargeRAA(subproof);
-    } else if (subproof.type === 'EE') {
-        dischargeEE(subproof);
+    // Get the actual premises from the proof lines
+    const premises = premiseLineNumbers.map(num => {
+        const line = proofLines.find(l => l.lineNumber === num);
+        return line ? line.formula : null;
+    }).filter(Boolean); // Remove any nulls
+    
+    if (premises.length !== premiseLineNumbers.length) {
+        EventBus.emit('feedback:show', { 
+            message: 'Not all premises could be found.', 
+            isError: true 
+        });
+        return false;
     }
-});
-
-
-export function checkWinCondition() {
-    const { proofLines, goalFormula } = store.getState();
-    if (!goalFormula || !goalFormula.formula) return false;
-    const goalAst = LogicParser.textToAst(goalFormula.formula);
-    if (!goalAst) return;
-
-    for (const line of proofLines) {
-        if (line.scopeLevel === 0 && line.isProven) {
-            if (LogicParser.areAstsEqual(line.formula, goalAst)) {
-                return true;
-            }
+    
+    // Apply the rule
+    const { applied, conclusion, error } = Rules.applyRule(ruleName, premises);
+    
+    if (applied && conclusion) {
+        // Add the result as a new proof line
+        const resultLine = addProofLine(
+            LogicParser.astToText(conclusion),
+            `${ruleName} on lines ${premiseLineNumbers.join(', ')}`,
+            store.getState().currentScopeLevel
+        );
+        
+        if (resultLine) {
+            EventBus.emit('feedback:show', { 
+                message: `Applied rule ${ruleName}`, 
+                isError: false 
+            });
+            return true;
         }
+    } else {
+        EventBus.emit('feedback:show', { 
+            message: error || `Failed to apply rule ${ruleName}`, 
+            isError: true 
+        });
+        return false;
     }
+    
     return false;
 }
 
-export function handleSubproofToggle(event) {
-    const headerLi = event.target.closest('li[data-is-collapsible="true"]');
-    if (!headerLi) return;
+// --- Proof Validation ---
 
-    const subproofId = headerLi.dataset.subproofId;
-    const isCurrentlyCollapsed = headerLi.dataset.collapsed === 'true';
-
-    headerLi.dataset.collapsed = (!isCurrentlyCollapsed).toString();
-
-    const proofList = document.getElementById('proof-lines');
-    proofList.querySelectorAll(`li[data-parent-subproof-id="${subproofId}"]`).forEach(line => {
-        line.classList.toggle('subproof-content-hidden', !isCurrentlyCollapsed);
-    });
+export function validateProof() {
+    const { proofLines, goalFormula } = store.getState();
+    
+    if (proofLines.length === 0 || !goalFormula) {
+        return { valid: false, message: 'Empty proof or no goal formula.' };
+    }
+    
+    // Check that the last line matches the goal formula
+    const lastLine = proofLines[proofLines.length - 1];
+    if (!lastLine) {
+        return { valid: false, message: 'No final proof line found.' };
+    }
+    
+    // For now we're just checking direct matching; a full implementation should 
+    // verify all rules were applied correctly and subproofs closed properly
+    if (goalFormula.ast && LogicParser.areAstsEqual(lastLine.formula, goalFormula.ast)) {
+        return { valid: true, message: 'Valid proof' };
+    } else {
+        return { valid: false, message: `Proof does not establish the goal formula.` };
+    }
 }
 
-export function setupProofLineDragging(proofList) {
-    proofList.addEventListener('dragstart', handleDragStartProofLine);
-    proofList.addEventListener('dragend', handleGenericDragEnd);
+export function checkWinCondition() {
+    const { valid } = validateProof();
+    return valid;
 }
 
+// --- Initialize Proof System ---
 
-// --- Initialization ---
 export function initializeProof() {
-    console.log("Initializing proof...");
-    const proofList = document.getElementById('proof-lines');
-    if (proofList) {
-        proofList.addEventListener('click', handleSubproofToggle);
-        setupProofLineDragging(proofList);
-        proofList.addEventListener('drop', handleDropOnProofArea);
+    console.log("Initializing proof system...");
+    // Setup event listeners for proof-related events
+    EventBus.on('subproof:start', (data) => {
+        startSubproof(data.type, data.assumptionFormula, data.goalFormula);
+    });
+    
+    EventBus.on('subproof:end', () => {
+        endSubproof();
+    });
+    
+    EventBus.on('rule:apply', (data) => {
+        applyRule(data.ruleName, data.premiseLineNumbers);
+    });
+
+    // Initialize with the first problem
+    const { currentProblem } = store.getState();
+    if (currentProblem) {
+        store.getState().loadProblem(currentProblem.set, currentProblem.number);
     }
 }
-
-EventBus.on('proof:startRAA', startRAA);
-EventBus.on('proof:startConditionalIntroduction', startConditionalIntroduction);
-EventBus.on('proof:startExistentialInstantiation', startExistentialInstantiation);
-EventBus.on('proof:addProofLine', (data) => addProofLine(data.formula, data.justification, data.scopeLevel));
-EventBus.on('proof:checkWinCondition', checkWinCondition);
-EventBus.on('proof:isNegationOf', ({ f1, f2, callback }) => callback(isNegationOf(f1, f2)));
-EventBus.on('proof:isAssumption', ({ lineItem, callback }) => callback(isAssumption(lineItem)));
-EventBus.on('proof:dischargeSubproof', (subproof) => {
-    if (subproof.type === 'RAA') {
-        dischargeRAA(subproof);
-    } else if (subproof.type === 'EE') {
-        dischargeEE(subproof);
-    }
-});
