@@ -1,6 +1,6 @@
 import { EventBus } from './event-bus.js';
 import { store } from './store.js';
-import { addProofLine, isNegationOf } from './proof.js';
+import { addProofLine, isNegationOf, startRAA } from './proof.js';
 
 // --- Drag Data Utilities ---
 export function setDragData(event, dataObject) {
@@ -18,7 +18,6 @@ export function handleWffDragStart(event) {
     let data;
 
     if (formulaElement) {
-        // It's a formula from the tray or proof lines
         data = {
             formula: formulaElement.dataset.formula,
             source: formulaElement.parentElement.id,
@@ -26,7 +25,6 @@ export function handleWffDragStart(event) {
             line: formulaElement.closest('li')?.dataset.lineNumber
         };
     } else if (event.target.classList.contains('draggable-var')) {
-        // It's a variable from the constructor tools
         const variableElement = event.target;
         data = {
             formula: variableElement.dataset.symbol,
@@ -34,7 +32,6 @@ export function handleWffDragStart(event) {
             type: variableElement.dataset.type
         };
     } else {
-        // Not a draggable element we handle here
         event.preventDefault();
         return;
     }
@@ -58,7 +55,6 @@ export function handleDropOnConnectiveHotspot(event) {
     const data = JSON.parse(jsonData);
     const connective = spot.dataset.connective;
 
-    // Validate that we have a proper connection
     if (data && typeof data === 'object') {
         store.getState().constructWff(data, connective);
     } else {
@@ -79,9 +75,6 @@ export function handleDropOnWffOutputTray(event) {
     }
     const data = JSON.parse(jsonData);
     
-    // If the item came from the proof, it's a copy, so we add it.
-    // If it came from another source (like another part of the tray), it might be a move.
-    // For simplicity, we'll treat all drops here as requests to add/move to the tray.
     if (data.source !== 'wff-output-tray') {
         EventBus.emit('wff:add', { formula: data.formula });
     }
@@ -102,58 +95,43 @@ export function handleDropOnTrashCan(event) {
     document.getElementById('trash-can-drop-area').classList.remove('trash-can-drag-over');
 }
 
-export function handleDropOnProofArea(e) {
-    e.preventDefault();
-    const targetProofList = e.target.closest('ol#proof-lines');
-    if (targetProofList) {
-        targetProofList.classList.remove('drag-over-proof');
+export function handleDropOnProofArea(event) {
+    event.preventDefault();
+    const jsonData = event.dataTransfer.getData('application/json');
+    if (!jsonData) {
+        return;
+    }
+    const data = JSON.parse(jsonData);
+    const targetLi = event.target.closest('li[data-line-number]');
+
+    if (!targetLi && (data.source === 'wff-constructor' || data.source === 'wff-output-tray')) {
+        startRAA(data.formula);
+        if (data.source === 'wff-output-tray') {
+            EventBus.emit('wff:remove', { elementId: data.elementId });
+        }
+        return;
+    }
+
+    if (targetLi && targetLi.dataset.isShowLine === 'true' && data.source === 'proof-lines') {
+        const subproofId = targetLi.dataset.subproofId;
+        const { subGoalStack } = store.getState();
+        const subproof = subGoalStack.find(sp => sp.subproofId === subproofId);
+        if (subproof && subproof.type === 'EE') {
+            EventBus.emit('proof:dischargeSubproof', { type: 'EE', subproof: subproof, conclusionLineId: data.line });
+            return;
+        }
+    }
+
+    if (data.source === 'proof-lines') {
+        const { formula, line, scopeLevel } = data;
+        if (scopeLevel <= store.getState().currentScopeLevel) {
+            addProofLine(formula, `Re ${line}`, store.getState().currentScopeLevel);
+        } else {
+            EventBus.emit('feedback:show', { message: "Reiteration Error: Cannot reiterate from inner scope.", isError: true });
+        }
     }
     
-    const jsonData = e.dataTransfer.getData('application/json');
-    if (!jsonData) { return; }
-    const data = JSON.parse(jsonData);
-    if (!data || !data.formula) { return; }
-
-    const targetLi = e.target.closest('li[data-line-number]'); 
-    const formulaToProcess = data.formula.trim();
-    const elementIdToProcess = data.elementId;
-
-    const { subGoalStack, currentScopeLevel } = store.getState();
-
-    // If from constructor (tray or button) and dropped on the main proof area...
-    if ((data.source.includes('wff-constructor') || data.source.includes('wff-output-tray')) && !targetLi) { 
-        // startProofByContradiction(formulaToProcess);
-        EventBus.emit('feedback:show', { message: `Would start proof by contradiction for ${formulaToProcess}`, isError: false });
-        if (data.source === 'wff-output-tray') { 
-            // removeWffFromTrayById(elementIdToProcess); 
-            EventBus.emit('wff:remove', { elementId: elementIdToProcess });
-        }
-    } else if (data.source === 'proof-lines') {
-        const { formula: draggedFormulaText, line: draggedLineId, scopeLevel: draggedScope } = data;
-        if (targetLi) { 
-            const targetFormula = targetLi.querySelector('.formula').dataset.formula;
-            const targetLineId = targetLi.dataset.lineNumber;
-            const targetScope = parseInt(targetLi.dataset.scopeLevel);
-
-            const activeSubProof = subGoalStack.length > 0 ? subGoalStack[subGoalStack.length - 1] : null;
-            if (activeSubProof && activeSubProof.type === "RAA" && 
-                draggedScope === activeSubProof.scope && targetScope === activeSubProof.scope) {
-                if (isNegationOf(draggedFormulaText, targetFormula)) {
-                    // dischargeRAA(activeSubProof, draggedLineId, targetLineId); 
-                    EventBus.emit('feedback:show', { message: `Would discharge RAA for ${activeSubProof.forWff}`, isError: false });
-                    return; 
-                }
-            } else {
-                 EventBus.emit('feedback:show', { message: "Cannot form contradiction here or not in RAA.", isError: true });
-            }
-        } else { 
-            if (draggedScope <= currentScopeLevel) {
-                addProofLine(draggedFormulaText, `Re ${draggedLineId}`, currentScopeLevel);
-            } else {
-                EventBus.emit('feedback:show', { message: "Reiteration Error: Cannot reiterate from inner scope.", isError: true });
-            }
-        }
-    }
+    document.getElementById('proof-lines').classList.remove('drag-over-proof');
 }
 
 // --- Generic Drag Over/Leave Highlighting ---
@@ -200,7 +178,7 @@ export function handleDragStartProofLine(e) {
     setDragData(e, {
         source: 'proof-lines', 
         formula: formulaText.trim(),
-        lineId: lineId, 
+        line: lineId, 
         scopeLevel: scope,
         elementId: lineItem.id || (lineItem.id = `proofline-${lineId.replace('.', '-')}`)
     });
