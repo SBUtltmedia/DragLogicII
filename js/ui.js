@@ -35,6 +35,7 @@ export function cacheDomElements() {
 
 // --- Modal Control ---
 function showWinModal() {
+    console.log('>>> showWinModal function called!');
     if (winModalOverlay) {
         winModalOverlay.classList.remove('hidden');
     }
@@ -332,11 +333,16 @@ function renderFormulaWithDraggableVars(formulaString) {
 function renderRules() {
     if (!inferenceRulesArea) return;
     inferenceRulesArea.innerHTML = '<h2>Inference Rules</h2>';
-    const ruleSet = Rules.getRuleSet();
-    const { activeRule, collectedPremises } = store.getState();
+    const allRules = Rules.getRuleSet();
+    const { activeRule, collectedPremises, currentSystem } = store.getState();
 
-    for (const ruleKey in ruleSet) {
-        const rule = ruleSet[ruleKey];
+    for (const ruleKey in allRules) {
+        const rule = allRules[ruleKey];
+        // Filter rules based on the current system
+        if (!rule.systems.includes(currentSystem)) {
+            continue;
+        }
+
         const ruleElement = document.createElement('div');
         ruleElement.className = 'rule-item';
         ruleElement.dataset.rule = ruleKey;
@@ -346,24 +352,17 @@ function renderRules() {
             ruleElement.classList.add('active');
         }
 
-        // Click handler remains the same, causing a re-render
         ruleElement.addEventListener('click', () => handleRuleItemClick(ruleKey));
 
-        // Implement legacy-style hover-activation on dragenter
         ruleElement.addEventListener('dragenter', (event) => {
             const item = event.currentTarget;
-            // Set a timer to activate the rule, preventing flickering
             item.dataset.hoverTimer = setTimeout(() => {
-                // Visually deactivate other rules
                 document.querySelectorAll('.rule-item.active').forEach(el => el.classList.remove('active'));
-                // Visually activate the current rule
                 item.classList.add('active');
-                // Silently update the store's active rule without re-rendering
                 store.getState().setActiveRule(ruleKey, true);
             }, 300);
         });
 
-        // Clear the timer on dragleave
         ruleElement.addEventListener('dragleave', (event) => {
             const item = event.currentTarget;
             clearTimeout(item.dataset.hoverTimer);
@@ -410,11 +409,16 @@ function renderRules() {
 function renderSubproofs() {
     if (!subproofsArea) return;
     subproofsArea.innerHTML = '<h2>Subproofs</h2>';
-    const subproofRuleSet = Rules.getSubproofRuleSet();
-    const { activeRule, collectedPremises } = store.getState();
+    const allSubproofRules = Rules.getSubproofRuleSet();
+    const { activeRule, collectedPremises, currentSystem } = store.getState();
 
-    for (const ruleKey in subproofRuleSet) {
-        const rule = subproofRuleSet[ruleKey];
+    for (const ruleKey in allSubproofRules) {
+        const rule = allSubproofRules[ruleKey];
+        // Filter rules based on the current system
+        if (!rule.systems.includes(currentSystem)) {
+            continue;
+        }
+
         const ruleElement = document.createElement('div');
         ruleElement.className = 'rule-item';
         ruleElement.dataset.rule = ruleKey;

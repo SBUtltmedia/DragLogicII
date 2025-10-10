@@ -8,6 +8,7 @@ export const ruleSet = {
     MP: {
         name: "Modus Ponens",
         premises: 2,
+        systems: ['propositional'],
         slots: [
             { placeholder: 'φ → ψ', expectedPattern: 'binary.→' },
             { placeholder: 'φ', expectedPattern: 'any' }
@@ -30,6 +31,7 @@ export const ruleSet = {
     MT: {
         name: "Modus Tollens",  
         premises: 2,
+        systems: ['propositional'],
         slots: [
             { placeholder: 'φ → ψ', expectedPattern: 'binary.→' },
             { placeholder: '~ψ', expectedPattern: 'negation' }
@@ -52,7 +54,7 @@ export const ruleSet = {
     DS: {
         name: 'Disjunctive Syllogism (DS)',
         premises: 2,
-        logicType: 'propositional',
+        systems: ['propositional'],
         slots: [
             { placeholder: 'φ ∨ ψ', expectedPattern: 'binary.∨' },
             { placeholder: '~φ', expectedPattern: 'negation' }
@@ -76,18 +78,36 @@ export const ruleSet = {
 
     // -- Addition (Add) --
     Add: {
-        name: 'Addition (Add)',
+        name: 'Addition (Add / ∨I)',
         premises: 2,
-        logicType: 'propositional',
+        systems: ['propositional'],
         slots: [
-            { placeholder: 'φ', expectedPattern: 'any' },
-            { placeholder: 'ψ', expectedPattern: 'any' }
+            { placeholder: 'φ (from proof or WFF)' },
+            { placeholder: 'ψ (from proof or WFF)' }
         ],
-        conclusion: 'φ ∨ ψ',
         apply: (premises) => {
             if (premises.length !== 2) return null;
-            const [p, q] = premises.map(p => p.formula);
-            return { type: 'binary', operator: '∨', left: p, right: q };
+            const [p1, p2] = premises;
+
+            const p1_line = p1.lineId;
+            const p2_line = p2.lineId;
+
+            // Fail if both are from WFF constructor (i.e., neither has a lineId)
+            if (!p1_line && !p2_line) {
+                EventBus.emit('feedback:show', { message: 'Addition requires at least one premise from the proof.', isError: true });
+                return null;
+            }
+
+            // Determine the justification. Use the line number(s) of the premise(s) from the proof.
+            const justificationLines = [p1_line, p2_line].filter(Boolean).join(', ');
+
+            const ast1 = LogicParser.textToAst(p1.formula);
+            const ast2 = LogicParser.textToAst(p2.formula);
+            
+            return {
+                resultAst: { type: 'binary', operator: '∨', left: ast1, right: ast2 },
+                justification: `Add, ${justificationLines}`
+            };
         }
     },
 
@@ -95,7 +115,7 @@ export const ruleSet = {
     Simp: {
         name: 'Simplification (Simp)',
         premises: 1,
-        logicType: 'propositional',
+        systems: ['propositional'],
         slots: [
             { placeholder: 'φ ∧ ψ', expectedPattern: 'binary.∧' }
         ],
@@ -114,7 +134,7 @@ export const ruleSet = {
     Conj: {
         name: 'Conjunction (Conj)',
         premises: 2,
-        logicType: 'propositional',
+        systems: ['propositional'],
         slots: [
             { placeholder: 'φ', expectedPattern: 'any' },
             { placeholder: 'ψ', expectedPattern: 'any' }
@@ -131,7 +151,7 @@ export const ruleSet = {
     CD: {
         name: 'Constructive Dilemma (CD)',
         premises: 2,
-        logicType: 'propositional',
+        systems: ['propositional'],
         slots: [
             { placeholder: '(φ → ψ) ∧ (χ → ω)', expectedPattern: 'binary.∧' },
             { placeholder: 'φ ∨ χ', expectedPattern: 'binary.∨' }
@@ -165,6 +185,7 @@ export const subproofRuleSet = {
         name: "Conditional Proof",
         premises: 1,
         isSubproof: true,
+        systems: ['propositional'],
         slots: [
             { placeholder: 'φ → ψ', expectedPattern: 'binary.→' }
         ],
@@ -174,6 +195,7 @@ export const subproofRuleSet = {
         name: "Reductio ad Absurdum",
         premises: 1,
         isSubproof: true,
+        systems: ['propositional'],
         slots: [
             { placeholder: 'φ', expectedPattern: 'any' }
         ],

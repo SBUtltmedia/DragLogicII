@@ -294,7 +294,7 @@ button {
 .accordion-header::after { content: ' ▼'; float: right; transition: transform 0.2s ease; }
 .accordion-header.closed::after { transform: rotate(-90deg); }
 .accordion-content { padding: 0.5em; border: 1px solid #334155; border-top: none; border-radius: 0 0 0.25em 0.25em; }
-.accordion-content.hidden { display: none; }
+.accordion-content.hidden { display: none !important; }
 
 /* Rule Item Styles */
 .rule-item {
@@ -410,5 +410,41 @@ html, #game-wrapper, .main-content-grid {
     background-color: #475569; /* slate-600 */
 }
 .hidden {
-    display: none;
+    display: none !important;
+}
+
+/* Simplification Popup */
+#simp-popup {
+    position: absolute;
+    background-color: #4a5568; /* slate-600 */
+    border: 1px solid #94a3b8; /* slate-400 */
+    padding: 0.8rem;
+    border-radius: 0.5rem;
+    z-index: 100;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+    width: max-content; /* Fit the content */
+}
+#simp-popup p {
+    margin-top: 0;
+    margin-bottom: 0.5rem;
+    font-size: 1.8cqw;
+    text-align: center;
+}
+.simp-choices {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+.simp-choices button {
+    background-color: #3b82f6; /* blue-500 */
+    color: white;
+    border: none;
+    padding: 0.5em 1em;
+    border-radius: 0.25em;
+    cursor: pointer;
+    font-family: monospace;
+}
+.simp-choices button:hover {
+    background-color: #2563eb; /* blue-600 */
 }

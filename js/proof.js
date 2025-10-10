@@ -43,6 +43,7 @@ function checkMainGoal(line) {
 
 export function addProofLine(formula, justification, scopeLevel, isAssumptionFlag = false,
  isShowLineFlag = false) {
+    console.log('addProofLine called with:', { formula, justification, scopeLevel });
     const { nextLineNumberGlobal, subGoalStack, proofLines, currentScopeLevel } = store.getState();
     let formulaAst;
     let cleanFormula;
@@ -193,10 +194,12 @@ export function applyActiveRule() {
         formula: LogicParser.textToAst(p.formula),
     }));
 
-    const resultAst = rule.apply(premisesData);
+    const result = rule.apply(premisesData);
 
-    if (resultAst) {
-        const justification = `${activeRule} ${premisesData.map(p => p.lineId || 'WFF').join(', ')}`;
+    if (result) {
+        // Handle rules that return a complex object with justification
+        const resultAst = result.resultAst || result;
+        const justification = result.justification || `${activeRule} ${premisesData.map(p => p.lineId || 'WFF').join(', ')}`;
         addProofLine(LogicParser.astToText(resultAst), justification, currentScopeLevel);
     } else {
         store.getState().addFeedback(`Rule ${activeRule} could not be applied.`, 'error');

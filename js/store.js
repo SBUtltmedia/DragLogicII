@@ -13,6 +13,7 @@ const initialState = {
     currentFeedbackIndex: -1,
     wffTrayFontSize: 1,
     subGoalStack: [],
+    currentSystem: 'propositional',
     currentProblem: {
         set: 1,
         number: 1

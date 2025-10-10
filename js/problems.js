@@ -13,20 +13,5 @@ export const problemSets = {
             { premises: ['P → (Q → R)', 'P ∧ Q'], goal: {formula: 'R'} },
             { premises: ['~(P ∧ Q)', 'P'], goal: {formula: '~Q'} }, // Requires De Morgan's laws or RAA
         ]
-    },
-    2: {
-        name: "First-Order Logic",
-        problems: [
-            { premises: ['∀x(F(x) → G(x))', 'F(a)'], goal: {formula: 'G(a)'} },
-            { premises: ['∀x(H(x) ∧ I(x))'], goal: {formula: '∀xH(x)'} },
-            { premises: ['∃x(J(x) ∨ K(x))'], goal: {formula: '∃xJ(x) ∨ ∃xK(x)'} },
-            { premises: ['F(a)'], goal: {formula: '∃x(F(x))'} },
-            { premises: ['∀x(F(x))'], goal: {formula: 'F(a)'} },
-            { premises: ['∀x(F(x) → G(x))', '~G(a)'], goal: {formula: '~F(a)'} },
-            { premises: ['∃x(F(x) ∧ G(x))'], goal: {formula: '∃x(F(x))'} },
-            { premises: ['∀x(F(x) → G(x))', '∀x(G(x) → H(x))'], goal: {formula: '∀x(F(x) → H(x))'} },
-            { premises: ['∃x(F(x))', '∀x(F(x) → G(x))'], goal: {formula: '∃x(G(x))'} },
-            { premises: ['~∃x(F(x))'], goal: {formula: '∀x(~F(x))'} },
-        ]
     }
 };
