@@ -3,22 +3,23 @@ import { store } from './store.js';
 import { LogicParser } from './parser.js';
 
 // --- Rule Definitions and Application Functions ---
-const ruleSet = {
+export const ruleSet = {
     // -- Modus Ponens (MP) --
     MP: {
         name: "Modus Ponens",
         premises: 2,
-        pattern: [
-            { type: 'binary', operator: '→' },
-            { type: 'atomic' }
+        slots: [
+            { placeholder: 'φ → ψ', expectedPattern: 'binary.→' },
+            { placeholder: 'φ', expectedPattern: 'any' }
         ],
-        apply: function(premise1, premise2) {
-            if (premise1 && premise2) {
-                if (premise1.type === 'binary' && premise1.operator === '→') {
-                    // If premise2 matches the left side of premise1
-                    if (LogicParser.areAstsEqual(premise2, premise1.left)) {
-                        return premise1.right; // Return the right side as conclusion
-                    }
+        conclusion: 'ψ',
+        apply: (premises) => {
+            if (premises.length !== 2) return null;
+            const [p_implies_q, p] = premises.map(p => p.formula);
+
+            if (p_implies_q.type === 'binary' && p_implies_q.operator === '→') {
+                if (LogicParser.areAstsEqual(p_implies_q.left, p)) {
+                    return p_implies_q.right;
                 }
             }
             return null;
@@ -29,162 +30,154 @@ const ruleSet = {
     MT: {
         name: "Modus Tollens",  
         premises: 2,
-        pattern: [
-            { type: 'binary', operator: '→' },
-            { type: 'negation' }
+        slots: [
+            { placeholder: 'φ → ψ', expectedPattern: 'binary.→' },
+            { placeholder: '~ψ', expectedPattern: 'negation' }
         ],
-        apply: function(premise1, premise2) {
-            if (premise1 && premise2) {
-                if (premise1.type === 'binary' && premise1.operator === '→') {
-                    // If premise2 is ~A and A is the right side of premise1
-                    if (premise2.type === 'negation' && LogicParser.areAstsEqual(premise2.operand, premise1.right)) {
-                        return { type: 'negation', operand: premise1.left };
-                    }
+        conclusion: '~φ',
+        apply: (premises) => {
+            if (premises.length !== 2) return null;
+            const [p_implies_q, not_q] = premises.map(p => p.formula);
+
+            if (p_implies_q.type === 'binary' && p_implies_q.operator === '→' && not_q.type === 'negation') {
+                if (LogicParser.areAstsEqual(p_implies_q.right, not_q.operand)) {
+                    return { type: 'negation', operand: p_implies_q.left };
                 }
             }
             return null;
         }
     },
 
-    // -- And Introduction (∧I) --
-    ANDI: {
-        name: "And Introduction",
+    // -- Disjunctive Syllogism (DS) --
+    DS: {
+        name: 'Disjunctive Syllogism (DS)',
         premises: 2,
-        pattern: [{ type: 'atomic' }, { type: 'atomic' }],
-        apply: function(premise1, premise2) {
-            if (premise1 && premise2 && premise1.type === 'atomic' && premise2.type === 'atomic') {
-                return { type: 'binary', operator: '∧', left: premise1, right: premise2 };
-            }
-            return null;
-        }
-    },
-
-    // -- And Elimination (∧E) --
-    ANDE: {
-        name: "And Elimination",
-        premises: 1,
-        pattern: [{ type: 'binary', operator: '∧' }],
-        apply: function(premise1) {
-            if (premise1 && premise1.type === 'binary' && premise1.operator === '∧') {
-                // Return either left or right side
-                return premise1.left; // Or could return premise1.right
-            }
-            return null;
-        }
-    },
-
-    // -- Or Introduction (∨I) --
-    ORI: {
-        name: "Or Introduction",
-        premises: 1,
-        pattern: [{ type: 'atomic' }],
-        apply: function(premise1, premise2 = null) {
-            if (premise1 && premise1.type === 'atomic') {
-                // We can add the premise to either side of a disjunction
-                return { type: 'binary', operator: '∨', left: premise1, right: { type: 'atomic', value: 'dummy' } };
-            }
-            return null;
-        }
-    },
-
-    // -- Or Elimination (∨E) --
-    ORE: {
-        name: "Or Elimination",
-        premises: 3,
-        pattern: [
-            { type: 'binary', operator: '∨' },
-            { type: 'binary', operator: '→' }, 
-            { type: 'binary', operator: '→' }
+        logicType: 'propositional',
+        slots: [
+            { placeholder: 'φ ∨ ψ', expectedPattern: 'binary.∨' },
+            { placeholder: '~φ', expectedPattern: 'negation' }
         ],
-        apply: function(premise1, premise2, premise3) {
-            // This is a simplified version - full ∨E would require complex subproof handling
-            if (premise1 && premise1.type === 'binary' && premise1.operator === '∨') {
-                // For now: return one of the disjuncts if it matches conditions 
-                return premise1.left;
+        conclusion: 'ψ',
+        apply: (premises) => {
+            if (premises.length !== 2) return null;
+            const [p_or_q, not_p] = premises.map(p => p.formula);
+
+            if (p_or_q.type === 'binary' && p_or_q.operator === '∨' && not_p.type === 'negation') {
+                if (LogicParser.areAstsEqual(p_or_q.left, not_p.operand)) {
+                    return p_or_q.right;
+                }
+                if (LogicParser.areAstsEqual(p_or_q.right, not_p.operand)) {
+                    return p_or_q.left;
+                }
             }
             return null;
         }
     },
 
-    // -- Conditional Proof (CP) --
+    // -- Addition (Add) --
+    Add: {
+        name: 'Addition (Add)',
+        premises: 2,
+        logicType: 'propositional',
+        slots: [
+            { placeholder: 'φ', expectedPattern: 'any' },
+            { placeholder: 'ψ', expectedPattern: 'any' }
+        ],
+        conclusion: 'φ ∨ ψ',
+        apply: (premises) => {
+            if (premises.length !== 2) return null;
+            const [p, q] = premises.map(p => p.formula);
+            return { type: 'binary', operator: '∨', left: p, right: q };
+        }
+    },
+
+    // -- Simplification (Simp) --
+    Simp: {
+        name: 'Simplification (Simp)',
+        premises: 1,
+        logicType: 'propositional',
+        slots: [
+            { placeholder: 'φ ∧ ψ', expectedPattern: 'binary.∧' }
+        ],
+        conclusion: 'φ',
+        apply: (premises) => {
+            if (premises.length !== 1) return null;
+            const p_and_q = premises[0].formula;
+            if (p_and_q.type === 'binary' && p_and_q.operator === '∧') {
+                return p_and_q.left;
+            }
+            return null;
+        }
+    },
+
+    // -- Conjunction (Conj) --
+    Conj: {
+        name: 'Conjunction (Conj)',
+        premises: 2,
+        logicType: 'propositional',
+        slots: [
+            { placeholder: 'φ', expectedPattern: 'any' },
+            { placeholder: 'ψ', expectedPattern: 'any' }
+        ],
+        conclusion: 'φ ∧ ψ',
+        apply: (premises) => {
+            if (premises.length !== 2) return null;
+            const [p, q] = premises.map(p => p.formula);
+            return { type: 'binary', operator: '∧', left: p, right: q };
+        }
+    },
+
+    // -- Constructive Dilemma (CD) --
+    CD: {
+        name: 'Constructive Dilemma (CD)',
+        premises: 2,
+        logicType: 'propositional',
+        slots: [
+            { placeholder: '(φ → ψ) ∧ (χ → ω)', expectedPattern: 'binary.∧' },
+            { placeholder: 'φ ∨ χ', expectedPattern: 'binary.∨' }
+        ],
+        conclusion: 'ψ ∨ ω',
+        apply: (premises) => {
+            if (premises.length !== 2) return null;
+            const [implications, disjunction] = premises.map(p => p.formula);
+
+            if (implications.type === 'binary' && implications.operator === '∧' &&
+                implications.left.type === 'binary' && implications.left.operator === '→' &&
+                implications.right.type === 'binary' && implications.right.operator === '→' &&
+                disjunction.type === 'binary' && disjunction.operator === '∨') {
+
+                const p = implications.left.left;
+                const q = implications.left.right;
+                const r = implications.right.left;
+                const s = implications.right.right;
+
+                if (LogicParser.areAstsEqual(disjunction.left, p) && LogicParser.areAstsEqual(disjunction.right, r)) {
+                    return { type: 'binary', operator: '∨', left: q, right: s };
+                }
+            }
+            return null;
+        }
+    },
+};
+
+export const subproofRuleSet = {
     CP: {
         name: "Conditional Proof",
-        premises: 0, // No direct premises needed, assumes a subproof
-        pattern: [], 
-        apply: function(premise1, premise2, premise3) {
-            // For now - just return null because CP is a meta-rule that affects scope,
-            // not an inference rule with immediate conclusion.
-            return null;
-        }
+        premises: 1,
+        isSubproof: true,
+        slots: [
+            { placeholder: 'φ → ψ', expectedPattern: 'binary.→' }
+        ],
+        apply: () => null
     },
-
-    // -- Reductio ad Absurdum (RAA) --
     RAA: {
         name: "Reductio ad Absurdum",
-        premises: 0, // No direct premises needed, assumes a subproof
-        pattern: [],
-        apply: function(premise1, premise2, premise3) {
-            // For now - just return null because RAA requires the assumption to lead to contradiction
-            return null;
-        }
-    },
-
-    // -- Universal Introduction (∀I) --
-    UI: {
-        name: "Universal Introduction",
         premises: 1,
-        pattern: [{ type: 'atomic' }], 
-        apply: function(premise1) {
-            if (premise1 && premise1.type === 'atomic') {
-                // For now - return a quantified formula
-                // This is simplified - proper UI would need to check for free variables
-                return { type: 'quantifier', quantifier: '∀', variable: 'x', formula: premise1 };
-            }
-            return null;
-        }
-    },
-
-    // -- Universal Elimination (∀E) --
-    UE: {
-        name: "Universal Elimination",
-        premises: 1,
-        pattern: [{ type: 'quantifier', quantifier: '∀' }],
-        apply: function(premise1) {
-            if (premise1 && premise1.type === 'quantifier' && premise1.quantifier === '∀') {
-                return premise1.formula; // Return the formula inside the quantifier
-            }
-            return null;
-        }
-    },
-
-    // -- Existential Introduction (∃I) --
-    EI: {
-        name: "Existential Introduction",
-        premises: 1,
-        pattern: [{ type: 'atomic' }],
-        apply: function(premise1) {
-            if (premise1 && premise1.type === 'atomic') {
-                return { type: 'quantifier', quantifier: '∃', variable: 'x', formula: premise1 };
-            }
-            return null;
-        }
-    },
-
-    // -- Existential Elimination (∃E) --  
-    EE: {
-        name: "Existential Elimination",
-        premises: 2,
-        pattern: [
-            { type: 'quantifier', quantifier: '∃' },
-            { type: 'binary', operator: '→' }
+        isSubproof: true,
+        slots: [
+            { placeholder: 'φ', expectedPattern: 'any' }
         ],
-        apply: function(premise1, premise2) {
-            if (premise1 && premise1.type === 'quantifier' && premise1.quantifier === '∃') {
-                // For now return the formula from the quantifier
-                return premise1.formula; // Simplified - real EE would need subproof logic
-            }
-            return null;
-        }
+        apply: () => null
     }
 };
 
@@ -202,7 +195,7 @@ export const Rules = {
         }
         
         // Try to apply the rule
-        const result = rule.apply(premises[0], premises[1], premises[2]);
+        const result = rule.apply(premises);
         
         if (result) {
             return { applied: true, conclusion: result, rule: ruleName };
@@ -213,6 +206,10 @@ export const Rules = {
 
     getRuleSet: function() {
         return ruleSet;
+    },
+
+    getSubproofRuleSet: function() {
+        return subproofRuleSet;
     }
 };
 

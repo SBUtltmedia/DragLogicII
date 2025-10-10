@@ -1,6 +1,7 @@
 import { EventBus } from './event-bus.js';
 import { store } from './store.js';
-import { addProofLine, isNegationOf } from './proof.js';
+import { addProofLine, isNegationOf, startRAA, dischargeRAA, startConditionalIntroduction } from './proof.js';
+import { LogicParser } from './parser.js';
 
 // --- Drag Data Utilities ---
 export function setDragData(event, dataObject) {
@@ -122,10 +123,8 @@ export function handleDropOnProofArea(e) {
 
     // If from constructor (tray or button) and dropped on the main proof area...
     if ((data.source.includes('wff-constructor') || data.source.includes('wff-output-tray')) && !targetLi) { 
-        // startProofByContradiction(formulaToProcess);
-        EventBus.emit('feedback:show', { message: `Would start proof by contradiction for ${formulaToProcess}`, isError: false });
+        startRAA(formulaToProcess);
         if (data.source === 'wff-output-tray') { 
-            // removeWffFromTrayById(elementIdToProcess); 
             EventBus.emit('wff:remove', { elementId: elementIdToProcess });
         }
     } else if (data.source === 'proof-lines') {
@@ -139,8 +138,7 @@ export function handleDropOnProofArea(e) {
             if (activeSubProof && activeSubProof.type === "RAA" && 
                 draggedScope === activeSubProof.scope && targetScope === activeSubProof.scope) {
                 if (isNegationOf(draggedFormulaText, targetFormula)) {
-                    // dischargeRAA(activeSubProof, draggedLineId, targetLineId); 
-                    EventBus.emit('feedback:show', { message: `Would discharge RAA for ${activeSubProof.forWff}`, isError: false });
+                    dischargeRAA(activeSubProof, draggedLineId, targetLineId); 
                     return; 
                 }
             } else {
@@ -197,12 +195,14 @@ export function handleDragStartProofLine(e) {
 
     const formulaDiv = lineItem.querySelector('.formula');
     const formulaText = formulaDiv.dataset.formula;
-    setDragData(e, {
+    const dragData = {
         source: 'proof-lines', 
         formula: formulaText.trim(),
         lineId: lineId, 
         scopeLevel: scope,
         elementId: lineItem.id || (lineItem.id = `proofline-${lineId.replace('.', '-')}`)
-    });
+    };
+    console.log('Dragging from proof line:', dragData);
+    setDragData(e, dragData);
     formulaDiv.classList.add('dragging');
 }

@@ -81,21 +81,32 @@ body {
     top: 7rem;
     left: 2rem;
     width: 28rem;
-    bottom: 2rem;
+    bottom: 6rem;
 }
 
 #proof-area {
     top: 7rem;
     left: 32rem;
     width: 40rem;
-    bottom: 2rem;
+    bottom: 6rem;
 }
 
 #rules-and-subproofs-column {
     top: 7rem;
     right: 2rem;
     width: 24rem;
+    bottom: 6rem;
+}
+
+#feedback-container {
+    position: absolute;
     bottom: 2rem;
+    left: 2rem;
+    right: 2rem;
+    height: 3rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 
@@ -183,7 +194,7 @@ button {
 #proof-area li.proof-line-complete .line-number,
 #proof-area li.proof-line-complete .justification { color: #f0fdf4; }
 
-.line-number { color: #94a3b8; margin-right: 0.5em; font-weight: bold; }
+.line-number { color: #94a3b8; margin-right: 0.5em; font-weight: normal; }
 .formula {
     font-family: monospace;
     color: #f1f5f9;
@@ -197,15 +208,15 @@ button {
     gap: 0.15em;
     margin-right: auto;
     transition: transform 0.2s ease-in-out;
+    font-weight: normal;
 }
 .formula.dragging { opacity: 0.5; cursor: grabbing; box-shadow: 0 0 5px #60a5fa; }
 .justification { font-size: 0.8em; color: #64748b; white-space: nowrap; flex-shrink: 0; }
-.proof-header, .proof-goal, .subproof-goal-display { padding: 0.5em; margin-bottom: 0.5em; background-color: #0f172a; border-radius: 0.25em; }
-.proof-header span, .proof-goal span, .subproof-goal-display span { font-weight: bold; color: #60a5fa; }
+.subproof-goal-display { padding: 0.5em; margin-bottom: 0.5em; background-color: #0f172a; border-radius: 0.25em; }
+.subproof-goal-display span { font-weight: bold; color: #60a5fa; }
 .subproof-goal-display { color: #f59e0b; }
 
 /* Feedback Area Styles */
-#feedback-container { display: flex; align-items: center; justify-content: center; margin-top: 0.5em; min-height: 1.5em; }
 #proof-feedback { text-align: center; font-weight: bold; flex-grow: 1; margin: 0 0.5em; font-size: calc(var(--base-font-size) * 1.8); }
 .feedback-nav-button {
     width: 1.5em;
@@ -258,20 +269,6 @@ button {
 #wff-output-tray .formula { background-color: #3b82f6; color: white; border-color: #1d4ed8; cursor: grab; }
 #wff-output-tray .formula.drag-over { border: 2px dashed #60a5fa; transform: scale(1.1); }
 #wff-output-tray .formula.dragging { opacity: 0.5; cursor: grabbing; }
-
-.wff-zoom-controls button {
-    background-color: #4b5563;
-    color: white;
-    border: none;
-    width: 1.5em;
-    height: 1.5em;
-    border-radius: 50%;
-    margin-left: 0.25em;
-    cursor: pointer;
-    line-height: 1.5em;
-    padding: 0;
-}
-.wff-zoom-controls button:hover { background-color: #64748b; }
 
 #trash-can-drop-area {
     padding: 0.1em 0.3em;
@@ -345,4 +342,73 @@ button {
 /* Remove obsolete styles */
 html, #game-wrapper, .main-content-grid {
     /* These are no longer used by the new layout engine */
+}
+
+/* Rule Conclusion Display */
+.rule-conclusion {
+    background-color: #1e293b; /* slate-800 */
+    color: #94a3b8; /* slate-400 */
+    padding: 0.5em;
+    margin-top: 0.5em;
+    border-radius: 0.25em;
+    text-align: center;
+    font-style: italic;
+    border-top: 1px solid #475569; /* slate-600 */
+}
+
+/* Win Modal Styles */
+#win-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+}
+#win-modal {
+    background-color: #334155; /* slate-700 */
+    padding: 2rem;
+    border-radius: 0.5rem;
+    text-align: center;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+    border: 1px solid #475569; /* slate-600 */
+}
+#win-modal h2 {
+    color: #22c55e; /* green-500 */
+    font-size: 2em;
+    margin-top: 0;
+    margin-bottom: 0.5rem;
+}
+#win-modal p {
+    font-size: 1.2em;
+    margin-bottom: 1.5rem;
+}
+.modal-buttons {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+}
+.modal-buttons button {
+    background-color: #3b82f6; /* blue-500 */
+    color: white;
+    border: none;
+    padding: 0.5em 1em;
+    border-radius: 0.25em;
+    cursor: pointer;
+}
+.modal-buttons button:hover {
+    background-color: #2563eb; /* blue-600 */
+}
+.modal-buttons #modal-close-btn {
+    background-color: #64748b; /* slate-500 */
+}
+.modal-buttons #modal-close-btn:hover {
+    background-color: #475569; /* slate-600 */
+}
+.hidden {
+    display: none;
 }

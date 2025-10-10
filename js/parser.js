@@ -1,6 +1,5 @@
 export const LogicParser = (() => {
     const operators = {
-        '=': { prec: 5, assoc: 'left' },
         '~': { prec: 4, assoc: 'right' },
         '∧': { prec: 3, assoc: 'left' },
         '∨': { prec: 2, assoc: 'left' },
@@ -9,8 +8,7 @@ export const LogicParser = (() => {
     };
 
     function tokenize(text) {
-        // Updated regex to include FOL tokens and '='
-        const regex = /\s*([PQRSFGHxyz]|\(|\)|~|∧|∨|→|↔|∀|∃|ι|=|,)\s*/g;
+        const regex = /\s*([PQRS]|\(|\)|~|∧|∨|→|↔)\s*/g;
         return text.replace(regex, ' $1 ').trim().split(/\s+/).filter(t => t.length > 0);
     }
 
@@ -38,40 +36,9 @@ export const LogicParser = (() => {
         if (/^[PQRS]$/.test(token)) {
             return { type: 'atomic', value: consume() };
         }
-        if (/^[FGH]$/.test(token)) {
-            const name = consume();
-            let args = [];
-            if (peek() === '(') {
-                consume(); // Eat '('
-                if(peek() !== ')') {
-                    args.push({ type: 'variable', value: consume() });
-                    while (peek() === ',') {
-                        consume(); // Eat ','
-                        args.push({ type: 'variable', value: consume() });
-                    }
-                }
-                match(')');
-            }
-            return { type: 'predicate', name, args };
-        }
-         if (/^[xyz]$/.test(token)) {
-            return { type: 'variable', value: consume() };
-        }
         if(token === '~') {
             consume();
             return {type: 'negation', operand: parseExpression(operators['~'].prec) }
-        }
-        if(token === '∀' || token === '∃') {
-            const quantifier = consume();
-            const variable = consume();
-            const formula = parseExpression(0); // Quantifiers bind tightly
-             return { type: 'quantifier', quantifier, variable, formula };
-        }
-        if(token === 'ι') {
-            const operator = consume();
-            const variable = consume();
-            const formula = parseExpression(0); // Iota binds tightly
-            return { type: 'description', operator, variable, formula };
         }
         throw new Error(`Unexpected token at start of expression: ${token}`);
     }
@@ -105,14 +72,10 @@ export const LogicParser = (() => {
          if (!ast) return '';
          switch (ast.type) {
             case 'atomic':
-            case 'variable':
                 return ast.value;
-            case 'predicate':
-                if (ast.args.length === 0) return ast.name;
-                return `${ast.name}(${ast.args.map(fromAstRecursive).join(', ')})`;
             case 'negation':
                 const operandStr = fromAstRecursive(ast.operand);
-                if (ast.operand.type === 'atomic' || ast.operand.type === 'predicate') {
+                if (ast.operand.type === 'atomic' || ast.operand.type === 'negation') {
                      return `~${operandStr}`;
                 }
                 return `~(${operandStr})`;
@@ -120,18 +83,6 @@ export const LogicParser = (() => {
                 const left = fromAstRecursive(ast.left);
                 const right = fromAstRecursive(ast.right);
                 return `(${left} ${ast.operator} ${right})`;
-             case 'quantifier':
-                const formulaStr = fromAstRecursive(ast.formula);
-                if (ast.formula.type === 'binary') {
-                    return `${ast.quantifier}${ast.variable}(${formulaStr})`;
-                }
-                return `${ast.quantifier}${ast.variable}${formulaStr}`;
-            case 'description':
-                const descFormulaStr = fromAstRecursive(ast.formula);
-                if (ast.formula.type === 'binary') {
-                    return `${ast.operator}${ast.variable}(${descFormulaStr})`;
-                }
-                return `${ast.operator}${ast.variable}${descFormulaStr}`;
             default:
                 throw new Error(`Unknown AST node type: ${ast.type}`);
          }
@@ -143,28 +94,13 @@ export const LogicParser = (() => {
 
         switch (ast1.type) {
             case 'atomic':
-            case 'variable':
                 return ast1.value === ast2.value;
-            case 'predicate':
-                 if (ast1.name !== ast2.name || ast1.args.length !== ast2.args.length) return false;
-                 for(let i = 0; i < ast1.args.length; i++) {
-                     if (!areEqual(ast1.args[i], ast2.args[i])) return false;
-                 }
-                 return true;
             case 'negation':
                 return areEqual(ast1.operand, ast2.operand);
             case 'binary':
                 return ast1.operator === ast2.operator &&
                        areEqual(ast1.left, ast2.left) &&
                        areEqual(ast1.right, ast2.right);
-             case 'quantifier':
-                return ast1.quantifier === ast2.quantifier &&
-                       ast1.variable === ast2.variable &&
-                       areEqual(ast1.formula, ast2.formula);
-            case 'description':
-                return ast1.operator === ast2.operator &&
-                       ast1.variable === ast2.variable &&
-                       areEqual(ast1.formula, ast2.formula);
             default:
                 return false;
         }

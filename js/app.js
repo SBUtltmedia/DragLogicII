@@ -1,5 +1,9 @@
 import { addEventListeners } from './ui.js';
 
+let initialized = false;
 document.addEventListener('DOMContentLoaded', () => {
-    addEventListeners();
+    if (!initialized) {
+        initialized = true;
+        addEventListeners();
+    }
 });

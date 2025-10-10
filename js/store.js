@@ -20,6 +20,8 @@ const initialState = {
     nextLineNumberGlobal: 1,
     currentScopeLevel: 0,
     selectedDraggable: null,
+    activeRule: null,
+    collectedPremises: [],
 };
 
 export const store = createStore((set, get) => ({
@@ -55,6 +57,7 @@ export const store = createStore((set, get) => ({
             proofLines: premisesAsts.map((p, i) => ({
                 lineNumber: i + 1,
                 formula: p.formula,
+                cleanFormula: LogicParser.astToText(p.formula),
                 justification: 'Premise',
                 scopeLevel: 0,
                 isProven: true,
@@ -66,10 +69,64 @@ export const store = createStore((set, get) => ({
             currentFeedbackIndex: 0
         });
         EventBus.emit('problem:loaded');
+        EventBus.emit('render');
     },
 
     addProofLine: (lineData) => {
         set(state => ({ proofLines: [...state.proofLines, lineData] }));
+        EventBus.emit('render');
+    },
+
+    setNextLineNumberGlobal: (newNumber) => set({ nextLineNumberGlobal: newNumber }),
+
+    constructWff: (operand, connective) => {
+        const { wffConstruction, addWff, clearWffConstruction, addFeedback } = get();
+        const { firstOperand, connective: waitingConnective } = wffConstruction;
+
+        const droppedAst = LogicParser.textToAst(operand.formula);
+        if (!droppedAst) { addFeedback("Invalid formula dropped.", "error"); return; }
+
+        if (connective === '~') { 
+            const newAst = { type: 'negation', operand: droppedAst };
+            addWff(newAst);
+            clearWffConstruction(); 
+        } else { 
+            if (!firstOperand) {
+                set({ wffConstruction: { firstOperand: operand, connective: connective } });
+                EventBus.emit('render');
+            } else {
+                if (waitingConnective === connective) { 
+                    const firstAst = LogicParser.textToAst(firstOperand.formula);
+                    if (!firstAst) { addFeedback("Invalid first formula.", "error"); clearWffConstruction(); return; }
+                    const newAst = { type: 'binary', operator: connective, left: firstAst, right: droppedAst };
+                    addWff(newAst);
+                    clearWffConstruction(); 
+                } else { addFeedback("WFF Error: Connective mismatch.", "error"); clearWffConstruction(); }
+            }
+        }
+    },
+
+    clearWffConstruction: () => {
+        set({ wffConstruction: { firstOperand: null, connective: null } });
+        EventBus.emit('render');
+    },
+
+    setWffConstruction: (wffConstruction) => {
+        set({ wffConstruction });
+        EventBus.emit('render');
+    },
+
+    addWff: (formula) => {
+        const newWff = {
+            formula: typeof formula === 'string' ? LogicParser.textToAst(formula) : formula,
+            elementId: `wff-${Date.now()}`
+        };
+        set(state => ({ wffTray: [...state.wffTray, newWff] }));
+        EventBus.emit('render');
+    },
+
+    removeWff: (elementId) => {
+        set(state => ({ wffTray: state.wffTray.filter(w => w.elementId !== elementId) }));
         EventBus.emit('render');
     },
 
@@ -91,6 +148,33 @@ export const store = createStore((set, get) => ({
         set(state => ({
             currentFeedbackIndex: Math.max(state.currentFeedbackIndex - 1, 0)
         }));
+    },
+
+    setActiveRule: (rule, silent = false) => {
+        // If the rule isn't changing, do nothing.
+        if (get().activeRule === rule) {
+            return;
+        }
+
+        // If the rule is changing, reset the premises.
+        set({ activeRule: rule, collectedPremises: [] });
+        
+        if (!silent) {
+            EventBus.emit('render');
+        }
+    },
+
+    addPremise: (premise, index) => {
+        set(state => {
+            const newPremises = [...state.collectedPremises];
+            newPremises[index] = premise;
+            return { collectedPremises: newPremises };
+        });
+        EventBus.emit('render');
+    },
+
+    clearPremises: () => {
+        set({ collectedPremises: [] });
     },
 
     // --- Subproof Management ---
@@ -126,6 +210,7 @@ export const store = createStore((set, get) => ({
         }));
         EventBus.emit('proof:update');
         EventBus.emit('subgoal:update');
+        return currentSubproof;
     },
 
     // --- Getter Methods ---
@@ -153,6 +238,15 @@ export const store = createStore((set, get) => ({
 
     decrementScopeLevel: () => {
         set(state => ({ currentScopeLevel: Math.max(0, state.currentScopeLevel - 1) }));
+    },
+
+    markLineAsWinner: (lineId) => {
+        set(state => ({
+            proofLines: state.proofLines.map(l => 
+                l.id === lineId ? { ...l, isWinningLine: true } : l
+            )
+        }));
+        EventBus.emit('render');
     },
 
     resetProofState: () => {
