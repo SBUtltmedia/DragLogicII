@@ -10,7 +10,26 @@ describe('Logic Parser', () => {
     test('should parse negation formulas', () => {
       const ast = LogicParser.textToAst('~P');
       expect(ast).toEqual({ 
-        type: 'negation', 
+        type: 'unary', 
+        operator: '~',
+        operand: { type: 'atomic', value: 'P' } 
+      });
+    });
+
+    test('should parse box formulas', () => {
+      const ast = LogicParser.textToAst('□P');
+      expect(ast).toEqual({ 
+        type: 'unary', 
+        operator: '□',
+        operand: { type: 'atomic', value: 'P' } 
+      });
+    });
+
+    test('should parse diamond formulas', () => {
+      const ast = LogicParser.textToAst('◊P');
+      expect(ast).toEqual({ 
+        type: 'unary', 
+        operator: '◊',
         operand: { type: 'atomic', value: 'P' } 
       });
     });
@@ -84,11 +103,22 @@ describe('Logic Parser', () => {
 
     test('should convert negation formulas correctly', () => {
       const ast = { 
-        type: 'negation', 
+        type: 'unary', 
+        operator: '~',
         operand: { type: 'atomic', value: 'P' } 
       };
       const text = LogicParser.astToText(ast);
       expect(text).toBe('~P');
+    });
+
+    test('should convert box formulas correctly', () => {
+      const ast = { 
+        type: 'unary', 
+        operator: '□',
+        operand: { type: 'atomic', value: 'P' } 
+      };
+      const text = LogicParser.astToText(ast);
+      expect(text).toBe('□P');
     });
 
     test('should convert conjunction formulas correctly', () => {
@@ -99,7 +129,6 @@ describe('Logic Parser', () => {
         right: { type: 'atomic', value: 'Q' }
       };
       const text = LogicParser.astToText(ast);
-      // Note: Outer parentheses aren't added for top-level binary operations
       expect(text).toBe('P ∧ Q');
     });
   });
@@ -118,14 +147,14 @@ describe('Logic Parser', () => {
     });
 
     test('should correctly handle negations', () => {
-      const ast1 = { type: 'negation', operand: { type: 'atomic', value: 'P' } };
-      const ast2 = { type: 'negation', operand: { type: 'atomic', value: 'P' } };
+      const ast1 = { type: 'unary', operator: '~', operand: { type: 'atomic', value: 'P' } };
+      const ast2 = { type: 'unary', operator: '~', operand: { type: 'atomic', value: 'P' } };
       expect(LogicParser.areAstsEqual(ast1, ast2)).toBe(true);
     });
 
     test('should correctly identify not equal negations', () => {
-      const ast1 = { type: 'negation', operand: { type: 'atomic', value: 'P' } };
-      const ast2 = { type: 'negation', operand: { type: 'atomic', value: 'Q' } };
+      const ast1 = { type: 'unary', operator: '~', operand: { type: 'atomic', value: 'P' } };
+      const ast2 = { type: 'unary', operator: '~', operand: { type: 'atomic', value: 'Q' } };
       expect(LogicParser.areAstsEqual(ast1, ast2)).toBe(false);
     });
 
@@ -160,6 +189,11 @@ describe('Logic Parser', () => {
     test('should handle spaces correctly', () => {
       const tokens = LogicParser.tokenize(' ( P ∧ Q ) ');
       expect(tokens).toEqual(['(', 'P', '∧', 'Q', ')']);
+    });
+
+    test('should tokenize modal operators', () => {
+        const tokens = LogicParser.tokenize('□(P → ◊Q)');
+        expect(tokens).toEqual(['□', '(', 'P', '→', '◊', 'Q', ')']);
     });
   });
 });

@@ -10,24 +10,16 @@ export function isNegationOf(f1, f2) {
     const ast2 = LogicParser.textToAst(f2);
     if (!ast1 || !ast2) return false;
 
-    return (ast1.type === 'negation' && LogicParser.areAstsEqual(ast1.operand, ast2)) ||
-           (ast2.type === 'negation' && LogicParser.areAstsEqual(ast2.operand, ast1));
+    return (ast1.type === 'unary' && ast1.operator === '~' && LogicParser.areAstsEqual(ast1.operand, ast2)) ||
+           (ast2.type === 'unary' && ast2.operator === '~' && LogicParser.areAstsEqual(ast2.operand, ast1));
 }
 
 function isAssumption(lineItem) { 
     return lineItem && lineItem.dataset.isAssumption === 'true'; 
 }
 
-// --- Proof Line Management ---
-
-/**
- * Creates a new proof line object and adds it to the store.
- * This is the single, authoritative way to add a line to the proof.
- * @returns {object} The line data object that was created.
- */
 function checkMainGoal(line) {
     const { goalFormula } = store.getState();
-    // Only check for wins in the main scope (scope 0)
     if (line.scopeLevel === 0 && goalFormula && goalFormula.ast) {
         if (LogicParser.areAstsEqual(line.formula, goalFormula.ast)) {
             store.getState().markLineAsWinner(line.id);
@@ -41,40 +33,29 @@ function checkMainGoal(line) {
     }
 }
 
-export function addProofLine(formula, justification, scopeLevel, isAssumptionFlag = false,
- isShowLineFlag = false) {
-    console.log('addProofLine called with:', { formula, justification, scopeLevel });
-    const { nextLineNumberGlobal, subGoalStack, proofLines, currentScopeLevel } = store.getState();
+// --- Proof Line Management ---
+export function addProofLine(formula, justification, scopeLevel, isAssumptionFlag = false, isShowLineFlag = false, fromImport = false) {
+    const { nextLineNumberGlobal, subGoalStack, proofLines, activeModalSystem } = store.getState();
     let formulaAst;
     let cleanFormula;
-    let formulaForParsing;
 
     if (typeof formula === 'string') {
         cleanFormula = formula.trim();
         if (isShowLineFlag) {
-            formulaForParsing = cleanFormula.replace(/^Show:\s*/i, '');
+            formulaAst = LogicParser.textToAst(cleanFormula.substring(5)); // Parse only the formula part
         } else {
-            formulaForParsing = cleanFormula;
+            formulaAst = LogicParser.textToAst(cleanFormula);
         }
-        formulaAst = LogicParser.textToAst(formulaForParsing);
     } else {
         formulaAst = formula;
         cleanFormula = LogicParser.astToText(formulaAst);
     }
 
-    // Prevent adding duplicate proven lines in the same scope
-    if (!isShowLineFlag && !isAssumptionFlag) {
-        const existingLines = proofLines.filter(line => line.scopeLevel === scopeLevel && 
-line.isProven);
-        for (const line of existingLines) {
-            if (LogicParser.areAstsEqual(formulaAst, line.formula)) {
-                EventBus.emit('feedback:show', { 
-                    message: `Formula already exists in current scope.`,
-                    isError: true 
-                });
-                return null;
-            }
-        }
+    // --- Modal Logic Importation Rules ---
+    const targetSubproof = subGoalStack.find(sp => sp.scopeLevel === scopeLevel);
+    if (targetSubproof && targetSubproof.isStrict && !fromImport) {
+        EventBus.emit('feedback:show', { message: `Cannot add line directly to strict subproof. Use importation rules.`, isError: true });
+        return null;
     }
 
     const newLine = {
@@ -85,7 +66,7 @@ line.isProven);
         justification,
         scopeLevel,
         isAssumption: isAssumptionFlag,
-        isProven: !isAssumptionFlag, // Assumptions are not proven yet
+        isProven: !isAssumptionFlag,
         isShowLine: isShowLineFlag,
     };
 
@@ -97,7 +78,6 @@ line.isProven);
     
     EventBus.emit('proof:lineAdded', newLine);
 
-    // Check for win conditions
     if (!isShowLineFlag && !isAssumptionFlag) {
         checkMainGoal(newLine);
         const activeSubProof = subGoalStack.length > 0 ? subGoalStack[subGoalStack.length - 1] : null;
@@ -113,6 +93,10 @@ line.isProven);
             } else if (activeSubProof.type === 'CP') {
                 if (LogicParser.areAstsEqual(formulaAst, activeSubProof.goalFormula)) {
                     dischargeCP(activeSubProof, newLine.lineNumber);
+                }
+            } else if (activeSubProof.type === 'Strict') {
+                if (LogicParser.areAstsEqual(formulaAst, activeSubProof.goalFormula)) {
+                    dischargeStrictSubproof();
                 }
             }
         }
@@ -133,7 +117,7 @@ export function startRAA(wffToProve) {
 
     addProofLine(`Show: ${wffToProve}`, "Goal (RAA)", currentScopeLevel, false, true);
 
-    const assumptionAst = { type: 'negation', operand: goalAst };
+    const assumptionAst = { type: 'unary', operator: '~', operand: goalAst };
     const assumptionFormula = LogicParser.astToText(assumptionAst);
 
     store.getState().startSubproof('RAA', assumptionAst, goalAst);
@@ -155,37 +139,68 @@ export function startConditionalIntroduction(conditionalFormula) {
     addProofLine(antecedentFormula, "Assumption (→I)", currentScopeLevel + 1, true);
 }
 
+export function startStrictSubproof(goalFormula) {
+    const { currentScopeLevel } = store.getState();
+    const goalAst = LogicParser.textToAst(goalFormula);
+    if (!goalAst || goalAst.type !== 'unary' || goalAst.operator !== '□') {
+        EventBus.emit('feedback:show', { message: 'Invalid goal for Strict Subproof.', isError: true });
+        return;
+    }
+
+    addProofLine(`Show: ${goalFormula}`, 'Goal (□I)', currentScopeLevel, false, true);
+    store.getState().startSubproof('Strict', null, goalAst.operand, { isStrict: true });
+}
+
 export function dischargeRAA(subproof, line1, line2) {
     if (!subproof || subproof.type !== "RAA") return;
 
-    const { proofLines } = store.getState();
     const dischargedSubproof = store.getState().endSubproof();
     const parentScopeLevel = dischargedSubproof.scopeLevel - 1;
 
     const conclusion = dischargedSubproof.goalFormula;
     const justification = `RAA ${line1}, ${line2}`;
 
-    addProofLine(LogicParser.astToText(conclusion), justification, parentScopeLevel);
+    addProofLine(conclusion, justification, parentScopeLevel);
 }
 
 export function dischargeCP(subproof, consequentLineId) {
     if (!subproof || subproof.type !== "CP") return;
 
-    const { proofLines } = store.getState();
     const dischargedSubproof = store.getState().endSubproof();
     const parentScopeLevel = dischargedSubproof.scopeLevel - 1;
 
     const conclusion = { type: 'binary', operator: '→', left: dischargedSubproof.assumptionFormula, right: dischargedSubproof.goalFormula };
     const justification = `CP ${consequentLineId}`;
 
-    addProofLine(LogicParser.astToText(conclusion), justification, parentScopeLevel);
+    addProofLine(conclusion, justification, parentScopeLevel);
+}
+
+export function dischargeStrictSubproof() {
+    const { proofLines, subGoalStack } = store.getState();
+    const strictSubproof = subGoalStack.find(sg => sg.isStrict);
+    if (!strictSubproof) return;
+
+    const linesInSubproof = proofLines.filter(l => l.scopeLevel === strictSubproof.scopeLevel && !l.isAssumption);
+    if (linesInSubproof.length === 0) {
+        EventBus.emit('feedback:show', { message: 'Cannot discharge an empty strict subproof.', isError: true });
+        return;
+    }
+
+    const lastLine = linesInSubproof[linesInSubproof.length - 1];
+    const dischargedSubproof = store.getState().endSubproof();
+    const parentScopeLevel = dischargedSubproof.scopeLevel - 1;
+
+    const conclusion = { type: 'unary', operator: '□', operand: lastLine.formula };
+    const justification = `□I`;
+
+    addProofLine(conclusion, justification, parentScopeLevel);
 }
 
 
 // --- Rule Application ---
 
 export function applyActiveRule() {
-    const { activeRule, collectedPremises, currentScopeLevel } = store.getState();
+    const { activeRule, collectedPremises, currentScopeLevel, subGoalStack } = store.getState();
     if (!activeRule) return;
 
     const rule = Rules.getRuleSet()[activeRule];
@@ -197,10 +212,13 @@ export function applyActiveRule() {
     const result = rule.apply(premisesData);
 
     if (result) {
-        // Handle rules that return a complex object with justification
         const resultAst = result.resultAst || result;
         const justification = result.justification || `${activeRule} ${premisesData.map(p => p.lineId || 'WFF').join(', ')}`;
-        addProofLine(LogicParser.astToText(resultAst), justification, currentScopeLevel);
+        
+        const targetSubproof = subGoalStack.find(sp => sp.scopeLevel === currentScopeLevel);
+        const isInsideStrictSubproof = targetSubproof && targetSubproof.isStrict;
+
+        addProofLine(resultAst, justification, currentScopeLevel, false, false, isInsideStrictSubproof);
     } else {
         store.getState().addFeedback(`Rule ${activeRule} could not be applied.`, 'error');
     }
@@ -217,14 +235,11 @@ export function validateProof() {
         return { valid: false, message: 'Empty proof or no goal formula.' };
     }
     
-    // Check that the last line matches the goal formula
     const lastLine = proofLines[proofLines.length - 1];
     if (!lastLine) {
         return { valid: false, message: 'No final proof line found.' };
     }
     
-    // For now we're just checking direct matching; a full implementation should 
-    // verify all rules were applied correctly and subproofs closed properly
     if (goalFormula.ast && LogicParser.areAstsEqual(lastLine.formula, goalFormula.ast)) {
         return { valid: true, message: 'Valid proof' };
     } else {
@@ -240,18 +255,10 @@ export function checkWinCondition() {
 // --- Initialize Proof System ---
 
 export function initializeProof() {
-    console.log("Initializing proof system...");
-    // Setup event listeners for proof-related events
-    EventBus.on('proof:startRAA', startRAA);
-    EventBus.on('proof:startConditionalIntroduction', startConditionalIntroduction);
-    EventBus.on('proof:dischargeRAA', dischargeRAA);
-    EventBus.on('proof:dischargeCP', dischargeCP);
-    
     EventBus.on('rule:apply', (data) => {
         applyRule(data.ruleName, data.premiseLineNumbers);
     });
 
-    // Initialize with the first problem
     const { currentProblem } = store.getState();
     if (currentProblem) {
         store.getState().loadProblem(currentProblem.set, currentProblem.number);

@@ -13,9 +13,9 @@ const initialState = {
     currentFeedbackIndex: -1,
     wffTrayFontSize: 1,
     subGoalStack: [],
-    currentSystem: 'propositional',
+    activeModalSystem: 'T', // Default to T as per modalUI.md
     currentProblem: {
-        set: 1,
+        set: 2,
         number: 1
     },
     nextLineNumberGlobal: 1,
@@ -30,6 +30,8 @@ export const store = createStore((set, get) => ({
 
     // --- Actions ---
 
+    setActiveModalSystem: (system) => set({ activeModalSystem: system }),
+
     loadProblem: (setNumber, problemNumber) => {
         console.log(`Loading problem: set ${setNumber}, number ${problemNumber}`);
         const problem = problemSets[setNumber]?.problems[problemNumber - 1];
@@ -37,6 +39,9 @@ export const store = createStore((set, get) => ({
             get().addFeedback(`Problem ${setNumber}-${problemNumber} not found.`, 'error');
             return;
         }
+
+        // Set the active system based on the problem data
+        set({ activeModalSystem: problem.system });
 
         const premisesAsts = problem.premises.map(p => { 
             const parsedAst = LogicParser.textToAst(p); 
@@ -53,9 +58,11 @@ export const store = createStore((set, get) => ({
 
         set({
             ...initialState, // Reset state
+            activeModalSystem: problem.system, // Explicitly set the system for the new problem
             premises: premisesAsts,
             goalFormula: goalAst,
             proofLines: premisesAsts.map((p, i) => ({
+                id: Date.now() + i,
                 lineNumber: i + 1,
                 formula: p.formula,
                 cleanFormula: LogicParser.astToText(p.formula),
@@ -87,8 +94,8 @@ export const store = createStore((set, get) => ({
         const droppedAst = LogicParser.textToAst(operand.formula);
         if (!droppedAst) { addFeedback("Invalid formula dropped.", "error"); return; }
 
-        if (connective === '~') { 
-            const newAst = { type: 'negation', operand: droppedAst };
+        if (connective === '~' || connective === '□' || connective === '◊') { 
+            const newAst = { type: 'unary', operator: connective, operand: droppedAst };
             addWff(newAst);
             clearWffConstruction(); 
         } else { 
@@ -132,23 +139,32 @@ export const store = createStore((set, get) => ({
     },
 
     addFeedback: (message, type = 'info') => {
+        const { feedbackHistory } = get();
+        const lastMessage = feedbackHistory[feedbackHistory.length - 1];
+        if (lastMessage && lastMessage.message === message) {
+            return; // Don't add duplicate messages
+        }
+
         const newFeedback = { message, type };
         set(state => ({
             feedbackHistory: [...state.feedbackHistory, newFeedback],
             currentFeedbackIndex: state.feedbackHistory.length
         }));
+        EventBus.emit('feedback:update');
     },
 
     showNextFeedback: () => {
         set(state => ({
             currentFeedbackIndex: Math.min(state.currentFeedbackIndex + 1, state.feedbackHistory.length - 1)
         }));
+        EventBus.emit('feedback:update');
     },
 
     showPreviousFeedback: () => {
         set(state => ({
             currentFeedbackIndex: Math.max(state.currentFeedbackIndex - 1, 0)
         }));
+        EventBus.emit('feedback:update');
     },
 
     setActiveRule: (rule, silent = false) => {
@@ -180,13 +196,14 @@ export const store = createStore((set, get) => ({
 
     // --- Subproof Management ---
     
-    startSubproof: (type, assumptionFormula, additionalData = {}) => {
+    startSubproof: (type, assumptionFormula, goalFormula, additionalData = {}) => {
         const { subGoalStack, currentScopeLevel } = get();
         const newSubGoal = {
             type,
             scopeLevel: currentScopeLevel + 1,
             assumptionFormula,
-            goalFormula: additionalData.goalFormula || null
+            goalFormula: additionalData.goalFormula || null,
+            isStrict: additionalData.isStrict || false, // Add isStrict flag
         };
         
         set(state => ({

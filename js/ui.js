@@ -2,14 +2,14 @@ import { store } from './store.js';
 import { EventBus } from './event-bus.js';
 import { problemSets } from './problems.js';
 import { Rules } from './rules.js';
-import { handleWffDragStart, handleGenericDragEnd, handleDropOnConnectiveHotspot, handleDropOnWffOutputTray, handleDropOnTrashCan, createDragHandler, handleDragStartProofLine } from './drag-drop.js';
-import { initializeProof, applyActiveRule, dischargeRAA, dischargeCP, startConditionalIntroduction, startRAA } from './proof.js';
+import { handleWffDragStart, handleGenericDragEnd, handleDropOnConnectiveHotspot, handleDropOnWffOutputTray, handleDropOnTrashCan, createDragHandler, handleDragStartProofLine, getDropValidationState, handleDropOnProofArea } from './drag-drop.js';
+import { initializeProof, applyActiveRule, dischargeRAA, dischargeCP, startConditionalIntroduction, startRAA, startStrictSubproof, dischargeStrictSubproof, addProofLine } from './proof.js';
 import { startTutorial, propositionalTutorialSteps } from './tutorial.js';
 import { LogicParser } from './parser.js';
 import { handleDraggableClick, handleDroppableClick } from './click-to-move.js';
 
 // --- DOM Element References ---
-let wffOutputTray, draggableVariables, connectiveHotspots, trashCanDropArea, proofList, proofFeedbackDiv, subGoalDisplayContainer, gameTitle, prevFeedbackBtn, nextFeedbackBtn, helpIcon, subproofsArea, inferenceRulesArea, winModalOverlay, modalNextProblemBtn, modalCloseBtn;
+let wffOutputTray, draggableVariables, connectiveHotspots, trashCanDropArea, proofList, proofFeedbackDiv, subGoalDisplayContainer, gameTitle, prevFeedbackBtn, nextFeedbackBtn, helpIcon, subproofsArea, inferenceRulesArea, winModalOverlay, modalNextProblemBtn, modalCloseBtn, simpPopup, simpChoiceLeft, simpChoiceRight, systemDisplay, proofDropSlot;
 let gameWrapper;
 
 export function cacheDomElements() {
@@ -29,22 +29,47 @@ export function cacheDomElements() {
     winModalOverlay = document.getElementById('win-modal-overlay');
     modalNextProblemBtn = document.getElementById('modal-next-problem-btn');
     modalCloseBtn = document.getElementById('modal-close-btn');
+    simpPopup = document.getElementById('simp-popup');
+    simpChoiceLeft = document.getElementById('simp-choice-left');
+    simpChoiceRight = document.getElementById('simp-choice-right');
+    systemDisplay = document.getElementById('system-display');
+    proofDropSlot = document.getElementById('proof-drop-slot');
 
     gameWrapper = document.getElementById('main-container');
 }
 
-// --- Modal Control ---
+// --- Modal & Popup Control ---
 function showWinModal() {
-    console.log('>>> showWinModal function called!');
-    if (winModalOverlay) {
-        winModalOverlay.classList.remove('hidden');
-    }
+    if (winModalOverlay) winModalOverlay.classList.remove('hidden');
 }
 
 function hideWinModal() {
-    if (winModalOverlay) {
-        winModalOverlay.classList.add('hidden');
-    }
+    if (winModalOverlay) winModalOverlay.classList.add('hidden');
+}
+
+function showSimpPopup(premise, ast, event) {
+    const leftText = LogicParser.astToText(ast.left);
+    const rightText = LogicParser.astToText(ast.right);
+
+    simpChoiceLeft.textContent = leftText;
+    simpChoiceRight.textContent = rightText;
+
+    const mainRect = gameWrapper.getBoundingClientRect();
+    simpPopup.style.left = `${event.clientX - mainRect.left}px`;
+    simpPopup.style.top = `${event.clientY - mainRect.top}px`;
+
+    simpPopup.classList.remove('hidden');
+
+    simpChoiceLeft.onclick = () => {
+        addProofLine(ast.left, `Simp, ${premise.lineId}`);
+        simpPopup.classList.add('hidden');
+        store.getState().clearPremises();
+    };
+    simpChoiceRight.onclick = () => {
+        addProofLine(ast.right, `Simp, ${premise.lineId}`);
+        simpPopup.classList.add('hidden');
+        store.getState().clearPremises();
+    };
 }
 
 // --- Central Render Function ---
@@ -59,85 +84,88 @@ function render() {
     renderSubproofs();
 }
 
-// --- Initialize UI Components ---
-export function initializeUI() {
-    // Set up the problem selector
-    const problemSelector = document.getElementById('problem-selector');
-    
-    if (problemSelector) {
-        problemSelector.innerHTML = '';
-        Object.entries(problemSets).forEach(([setNumber, set]) => {
-            const optGroup = document.createElement('optgroup');
-            optGroup.label = set.name;
-            
-            set.problems.forEach((problem, index) => {
-                const option = document.createElement('option');
-                option.value = `${setNumber}-${index + 1}`;
-                option.textContent = `#${index + 1}`;
-                optGroup.appendChild(option);
-            });
-            
-            problemSelector.appendChild(optGroup);
-        });
+// --- Drag and Drop UI ---
+function showProofDropSlot(targetLi, validationState) {
+    proofDropSlot.classList.remove('hidden', 'valid-drop', 'invalid-drop');
+    if (validationState.isValid) {
+        proofDropSlot.classList.add('valid-drop');
+        proofDropSlot.textContent = `Drop to apply: ${validationState.justification}`;
+    } else {
+        proofDropSlot.classList.add('invalid-drop');
+        proofDropSlot.textContent = validationState.message || 'Invalid move';
     }
 
-    // Initialize the proof area
+    if (targetLi) {
+        targetLi.parentNode.insertBefore(proofDropSlot, targetLi.nextSibling);
+    } else {
+        proofList.appendChild(proofDropSlot);
+    }
+}
+
+function hideProofDropSlot() {
+    proofDropSlot.classList.add('hidden');
+}
+
+function handleProofAreaDragOver(event) {
+    event.preventDefault();
+    const jsonData = event.dataTransfer.getData('application/json');
+    if (!jsonData) return;
+
+    const data = JSON.parse(jsonData);
+    const targetLi = event.target.closest('li[data-line-number]');
+    const validationState = getDropValidationState(data, targetLi);
+
+    showProofDropSlot(targetLi, validationState);
+}
+
+function handleProofAreaDragLeave(event) {
+    const proofArea = document.getElementById('proof-area');
+    if (!proofArea.contains(event.relatedTarget)) {
+        hideProofDropSlot();
+    }
+}
+
+// --- Initialize UI Components ---
+export function initializeUI() {
     initializeProof();
     
-    // Setup event listeners for proof lines (using the drop area)
-    if (proofList) {
-        const proofArea = document.getElementById('proof-area');
-        
-        proofArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            proofArea.classList.add('drag-over-proof-area');
-        });
-        
-        proofArea.addEventListener('dragleave', (e) => {
-            e.preventDefault();
-            proofArea.classList.remove('drag-over-proof-area');
-        });
-
+    const proofArea = document.getElementById('proof-area');
+    if (proofArea) {
+        proofArea.addEventListener('dragover', handleProofAreaDragOver);
+        proofArea.addEventListener('dragleave', handleProofAreaDragLeave);
+        proofArea.addEventListener('drop', handleDropOnProofArea);
         proofList.addEventListener('click', handleSubproofToggle);
     }
     
-    // Setup the WFF output tray
     if (wffOutputTray) {
         const dragHandler = createDragHandler('#wff-output-tray', 'drag-over-tray');
-        
         wffOutputTray.addEventListener('dragover', dragHandler.dragover);
         wffOutputTray.addEventListener('dragleave', dragHandler.dragleave);
         wffOutputTray.addEventListener('drop', handleDropOnWffOutputTray);
     }
 
-    // Setup connectives
     if (connectiveHotspots) {
         connectiveHotspots.forEach(hotspot => {
             const dragHandler = createDragHandler(`[data-connective="${hotspot.dataset.connective}"]`, 'drag-over-connective');
-            
             hotspot.addEventListener('dragover', dragHandler.dragover);
             hotspot.addEventListener('dragleave', dragHandler.dragleave);
             hotspot.addEventListener('drop', handleDropOnConnectiveHotspot);
         });
     }
 
-    // Setup trash can
     if (trashCanDropArea) {
         const dragHandler = createDragHandler('#trash-can-drop-area', 'trash-can-drag-over');
-        
         trashCanDropArea.addEventListener('dragover', dragHandler.dragover);
         trashCanDropArea.addEventListener('dragleave', dragHandler.dragleave);
         trashCanDropArea.addEventListener('drop', handleDropOnTrashCan);
     }
     
-    // Setup help icon
     if (helpIcon) {
         helpIcon.addEventListener('click', () => {
             startTutorial(propositionalTutorialSteps);
         });
     }
     
-    // Setup feedback navigation buttons
     if (prevFeedbackBtn) {
         prevFeedbackBtn.addEventListener('click', () => {
             store.getState().showPreviousFeedback();
@@ -150,7 +178,6 @@ export function initializeUI() {
         });
     }
 
-    // Setup Modal Buttons
     if (modalNextProblemBtn) {
         modalNextProblemBtn.addEventListener('click', () => {
             const { currentProblem } = store.getState();
@@ -170,41 +197,8 @@ export function initializeUI() {
         modalCloseBtn.addEventListener('click', hideWinModal);
     }
 
-    // Set up drag events
     document.addEventListener('dragstart', handleWffDragStart);
     document.addEventListener('dragend', handleGenericDragEnd);
-    
-    // Set up other UI events
-    const resetButton = document.getElementById('reset-button');
-    if (resetButton) {
-        resetButton.addEventListener('click', () => {
-            EventBus.emit('proof:reset');
-        });
-    }
-
-    const tutorialButton = document.getElementById('tutorial-button');
-    if (tutorialButton) {
-        tutorialButton.addEventListener('click', () => {
-            startTutorial(propositionalTutorialSteps);
-        });
-    }
-
-    const solutionButton = document.getElementById('solution-button');
-    if (solutionButton) {
-        solutionButton.addEventListener('click', () => {
-            EventBus.emit('solution:show');
-        });
-    }
-
-    // Problem selector
-    if (problemSelector) {
-        problemSelector.addEventListener('change', (e) => {
-            const [setNumber, problemNumber] = e.target.value.split('-').map(Number);  
-            if (!isNaN(setNumber) && !isNaN(problemNumber)) {
-                EventBus.emit('problem:load', { set: setNumber, number: problemNumber });
-            }
-        });
-    }
 }
 
 // --- Event Listener Setup ---
@@ -213,18 +207,15 @@ export function addEventListeners() {
     initializeUI();
     
     EventBus.on('render', render);
-
     EventBus.on('ui:showWinModal', showWinModal);
-
+    EventBus.on('ui:hideProofDropSlot', hideProofDropSlot);
     EventBus.on('feedback:show', (data) => {
-        showFeedback(data.message, data.isError); 
+        store.getState().addFeedback(data.message, data.isError ? 'error' : 'success');
     });
-
+    EventBus.on('feedback:update', renderFeedback);
     EventBus.on('problem:loaded', () => {
-        console.log('problem:loaded event received in ui.js');
         updateProblemDisplay();
     });
-    
     EventBus.on('subgoal:update', () => {
         updateSubGoalDisplay();
     });
@@ -233,15 +224,10 @@ export function addEventListeners() {
 // --- UI Render Functions ---
 function renderProofLines() {
     const { proofLines, subGoalStack } = store.getState();
-    
     if (!proofList) return;
-    
     proofList.innerHTML = '';
 
-    // Sort the lines by scope level to ensure proper nesting
-    const orderedLines = [...proofLines].sort((a, b) => a.scopeLevel - b.scopeLevel);
-    
-    orderedLines.forEach(line => {
+    proofLines.forEach(line => {
         const li = document.createElement('li');
         li.className = `proof-line`;
         li.dataset.lineNumber = line.lineNumber;
@@ -257,6 +243,11 @@ function renderProofLines() {
             li.classList.add('proof-line-complete');
         }
 
+        const subproof = subGoalStack.find(sg => sg.scopeLevel === line.scopeLevel);
+        if (subproof && subproof.isStrict) {
+            li.classList.add('strict-subproof-line');
+        }
+
         if (line.isShowLine) {
             li.classList.add('show-line', 'subproof-header-collapsible');
             li.dataset.isCollapsible = 'true';
@@ -267,7 +258,6 @@ function renderProofLines() {
             li.style.marginLeft = `${line.scopeLevel * 1.5}rem`;
         }
         
-        // Add the line content
         const lineNumberSpan = document.createElement('span');
         lineNumberSpan.className = 'line-number';
         lineNumberSpan.textContent = line.lineNumber;
@@ -312,20 +302,10 @@ function renderWffTray(wffTray) {
 
 function renderFormulaWithDraggableVars(formulaString) {
     const fragment = document.createDocumentFragment();
-    const parts = formulaString.split(/([(),~∧∨→↔∀∃])|([xyz])/).filter(p => p);
+    const parts = formulaString.split(/([(),~∧∨→↔∀∃□◊])/).filter(p => p && p.trim());
     
     parts.forEach(part => {
-        if (/^[xyz]$/.test(part)) {
-            const span = document.createElement('span');
-            span.className = 'draggable-var fol-variable';
-            span.draggable = true;
-            span.dataset.type = 'fol-variable';
-            span.dataset.symbol = part;
-            span.textContent = part;
-            fragment.appendChild(span);
-        } else {
-            fragment.appendChild(document.createTextNode(part));
-        }
+        fragment.appendChild(document.createTextNode(part));
     });
     return fragment;
 }
@@ -334,12 +314,11 @@ function renderRules() {
     if (!inferenceRulesArea) return;
     inferenceRulesArea.innerHTML = '<h2>Inference Rules</h2>';
     const allRules = Rules.getRuleSet();
-    const { activeRule, collectedPremises, currentSystem } = store.getState();
+    const { activeRule, collectedPremises, activeModalSystem } = store.getState();
 
     for (const ruleKey in allRules) {
         const rule = allRules[ruleKey];
-        // Filter rules based on the current system
-        if (!rule.systems.includes(currentSystem)) {
+        if (!rule.systems.includes(activeModalSystem)) {
             continue;
         }
 
@@ -410,12 +389,11 @@ function renderSubproofs() {
     if (!subproofsArea) return;
     subproofsArea.innerHTML = '<h2>Subproofs</h2>';
     const allSubproofRules = Rules.getSubproofRuleSet();
-    const { activeRule, collectedPremises, currentSystem } = store.getState();
+    const { activeRule, collectedPremises, activeModalSystem } = store.getState();
 
     for (const ruleKey in allSubproofRules) {
         const rule = allSubproofRules[ruleKey];
-        // Filter rules based on the current system
-        if (!rule.systems.includes(currentSystem)) {
+        if (!rule.systems.includes(activeModalSystem)) {
             continue;
         }
 
@@ -474,6 +452,14 @@ function handleDropOnRuleSlot(event, ruleKey, slotIndex) {
     const { activeRule } = store.getState();
     const rule = Rules.getRuleSet()[activeRule] || Rules.getSubproofRuleSet()[activeRule];
 
+    if (activeRule === 'Simp') {
+        const ast = LogicParser.textToAst(data.formula);
+        if (ast.type === 'binary' && ast.operator === '∧') {
+            showSimpPopup(data, ast, event);
+            return;
+        }
+    }
+
     if (rule.isSubproof) {
         if (activeRule === 'CP') {
             const ast = LogicParser.textToAst(data.formula);
@@ -484,6 +470,13 @@ function handleDropOnRuleSlot(event, ruleKey, slotIndex) {
             }
         } else if (activeRule === 'RAA') {
             startRAA(data.formula);
+        } else if (activeRule === 'Strict') {
+            const ast = LogicParser.textToAst(data.formula);
+            if (ast.type === 'unary' && ast.operator === '□') {
+                startStrictSubproof(data.formula);
+            } else {
+                store.getState().addFeedback('Only a Box (□) formula can be used to start a strict subproof.', 'error');
+            }
         }
     } else {
         store.getState().addPremise(data, slotIndex);
@@ -513,21 +506,19 @@ function updateConnectiveHotspots(wffConstruction) {
     }
 }
 
-function showFeedback(message, isError = false) {
+function renderFeedback() {
     if (!proofFeedbackDiv) return;
-    
-    const feedbackElement = document.createElement('div');
-    feedbackElement.className = `alert ${isError ? 'alert-danger' : 'alert-success'}`;
-    feedbackElement.textContent = message;
-    
-    proofFeedbackDiv.appendChild(feedbackElement);
-    
-    // Auto-remove after delay
-    setTimeout(() => {
-        if (feedbackElement.parentNode) {
-            feedbackElement.parentNode.removeChild(feedbackElement);
-        }
-    }, 5000);
+
+    const { feedbackHistory, currentFeedbackIndex } = store.getState();
+    const feedback = feedbackHistory[currentFeedbackIndex];
+
+    if (feedback) {
+        proofFeedbackDiv.textContent = feedback.message;
+        proofFeedbackDiv.className = `alert ${feedback.type === 'error' ? 'alert-danger' : 'alert-success'}`;
+    } else {
+        proofFeedbackDiv.textContent = '';
+        proofFeedbackDiv.className = '';
+    }
 }
 
 function handleSubproofToggle(event) {
@@ -546,10 +537,13 @@ function handleSubproofToggle(event) {
 
 // --- Display Updates ---
 function updateProblemDisplay() {
-    console.log('updateProblemDisplay called in ui.js');
-    const { goalFormula, currentProblem } = store.getState();
+    const { goalFormula, currentProblem, activeModalSystem } = store.getState();
     const problemSetInfo = problemSets[currentProblem.set];
     gameTitle.textContent = `Natural Deduction Contraption - ${problemSetInfo.name} #${currentProblem.number}`;
+
+    if (systemDisplay) {
+        systemDisplay.textContent = activeModalSystem;
+    }
 
     const problemInfoDiv = document.getElementById('proof-problem-info');
     if (problemInfoDiv) {
@@ -566,7 +560,6 @@ function updateSubGoalDisplay() {
     
     if (!subGoalDisplayContainer) return;
     
-    // Clear the container
     subGoalDisplayContainer.innerHTML = '';
     
     if (subGoalStack.length > 0) {

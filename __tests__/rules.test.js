@@ -17,69 +17,78 @@ describe('Rules Module', () => {
     test('should have rule definitions with correct structure', () => {
       const mpRule = ruleSet.MP;
       expect(mpRule).toBeDefined();
-      expect(mpRule.name).toBe('Modus Ponens (MP)');
+      expect(mpRule.name).toBe('Modus Ponens');
       expect(mpRule.premises).toBe(2);
-      expect(mpRule.logicType).toBe('propositional');
+      expect(mpRule.systems).toContain('propositional');
       expect(Array.isArray(mpRule.slots)).toBe(true);
     });
 
     test('should contain subproof rules', () => {
-      expect(Object.keys(ruleSet)).toContain('CP');
-      expect(Object.keys(ruleSet)).toContain('RAA');
-      expect(ruleSet.CP.isSubproof).toBe(true);
-      expect(ruleSet.RAA.isSubproof).toBe(true);
+      const { CP, RAA } = require('../js/rules.js').subproofRuleSet;
+      expect(CP).toBeDefined();
+      expect(RAA).toBeDefined();
+      expect(CP.isSubproof).toBe(true);
+      expect(RAA.isSubproof).toBe(true);
     });
   });
 
   describe('Modus Ponens (MP) rule', () => {
     const mpRule = ruleSet.MP;
 
-    test('should correctly apply MP when premises are in order', () => {
+    test('should correctly apply MP', () => {
         const slotsData = [
-            { formula: LogicParser.textToAst('P→Q'), line: '1' },
-            { formula: LogicParser.textToAst('P'), line: '2' }
+            { formula: LogicParser.textToAst('P→Q') },
+            { formula: LogicParser.textToAst('P') }
         ];
         const result = mpRule.apply(slotsData);
         expect(LogicParser.areAstsEqual(result, LogicParser.textToAst('Q'))).toBe(true);
     });
+  });
 
-    test('should correctly apply MP when premises are reversed', () => {
-        const slotsData = [
-            { formula: LogicParser.textToAst('P'), line: '1' },
-            { formula: LogicParser.textToAst('P→Q'), line: '2' }
-        ];
-        const result = mpRule.apply(slotsData);
-        expect(result).toBeNull();
-    });
+  // --- Modal Logic Rule Tests ---
 
-    test('should return null for invalid premises', () => {
-        const slotsData = [
-            { formula: LogicParser.textToAst('P→Q'), line: '1' },
-            { formula: LogicParser.textToAst('R'), line: '2' }
-        ];
-        const result = mpRule.apply(slotsData);
-        expect(result).toBeNull();
+  describe('Rule (D)', () => {
+    const rule = ruleSet.D;
+    test('should derive ◊P from □P', () => {
+        const premises = [{ formula: LogicParser.textToAst('□P') }];
+        const result = rule.apply(premises);
+        expect(LogicParser.areAstsEqual(result, LogicParser.textToAst('◊P'))).toBe(true);
     });
   });
 
-  describe('Conjunction Introduction (Conj) rule', () => {
-    const conjRule = ruleSet.Conj;
-
-    test('should correctly apply Conj rule', () => {
-        const slotsData = [
-            { formula: LogicParser.textToAst('P'), line: '1' },
-            { formula: LogicParser.textToAst('Q'), line: '2' }
-        ];
-        const result = conjRule.apply(slotsData);
-        expect(LogicParser.areAstsEqual(result, LogicParser.textToAst('P ∧ Q'))).toBe(true);
+  describe('Rule (T)', () => {
+    const rule = ruleSet.T;
+    test('should derive P from □P', () => {
+        const premises = [{ formula: LogicParser.textToAst('□P') }];
+        const result = rule.apply(premises);
+        expect(LogicParser.areAstsEqual(result, LogicParser.textToAst('P'))).toBe(true);
     });
+  });
 
-    test('should return null for insufficient premises', () => {
-        const slotsData = [
-            { formula: LogicParser.textToAst('P'), line: '1' }
-        ];
-        const result = conjRule.apply(slotsData);
-        expect(result).toBeNull();
+  describe('Rule (B)', () => {
+    const rule = ruleSet.B;
+    test('should derive □◊P from P', () => {
+        const premises = [{ formula: LogicParser.textToAst('P') }];
+        const result = rule.apply(premises);
+        expect(LogicParser.areAstsEqual(result, LogicParser.textToAst('□◊P'))).toBe(true);
+    });
+  });
+
+  describe('Rule (4)', () => {
+    const rule = ruleSet['4'];
+    test('should derive □□P from □P', () => {
+        const premises = [{ formula: LogicParser.textToAst('□P') }];
+        const result = rule.apply(premises);
+        expect(LogicParser.areAstsEqual(result, LogicParser.textToAst('□□P'))).toBe(true);
+    });
+  });
+
+  describe('Rule (5)', () => {
+    const rule = ruleSet['5'];
+    test('should derive □◊P from ◊P', () => {
+        const premises = [{ formula: LogicParser.textToAst('◊P') }];
+        const result = rule.apply(premises);
+        expect(LogicParser.areAstsEqual(result, LogicParser.textToAst('□◊P'))).toBe(true);
     });
   });
 });

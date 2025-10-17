@@ -141,6 +141,29 @@ button {
 
 
 /* Proof Area Specifics */
+.proof-header-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+.system-selector-container select {
+    background-color: #4b5563;
+    color: white;
+    border: 1px solid #64748b;
+    border-radius: 0.25em;
+    padding: 0.3em;
+}
+
+#system-display {
+    background-color: #4b5563; /* slate-600 */
+    color: #e2e8f0; /* slate-200 */
+    padding: 0.3em 0.8em;
+    border-radius: 1em;
+    font-size: 1.5cqw;
+    font-weight: bold;
+}
+
 #proof-area ol { list-style-type: none; padding-left: 0; flex-grow: 1; overflow-y: auto; margin: 0; border: 2px dashed transparent; }
 #proof-area ol.drag-over-proof { border-color: #60a5fa; background-color: rgba(96, 165, 250, 0.1); }
 
@@ -164,6 +187,11 @@ button {
 .subproof-assumption {
     background-color: #4b5563 !important;
 }
+.strict-subproof-line {
+    border-left: 2px solid #fca5a5 !important; /* A different color for strict subproofs */
+    background-color: #3f3f46; /* A slightly different background */
+}
+
 .show-line {
     background-color: #0f172a;
     border-style: dashed;
@@ -217,7 +245,14 @@ button {
 .subproof-goal-display { color: #f59e0b; }
 
 /* Feedback Area Styles */
-#proof-feedback { text-align: center; font-weight: bold; flex-grow: 1; margin: 0 0.5em; font-size: calc(var(--base-font-size) * 1.8); }
+#proof-feedback { 
+    text-align: center; 
+    font-weight: bold; 
+    flex-grow: 1; 
+    margin: 0 0.5em; 
+    font-size: calc(var(--base-font-size) * 1.8); 
+    user-select: text;
+}
 .feedback-nav-button {
     width: 1.5em;
     height: 1.5em;
@@ -327,6 +362,8 @@ button {
     transition: transform 0.2s ease-in-out;
 }
 .drop-slot.drag-over { border-color: #60a5fa; background-color: #334155; transform: scale(1.05); }
+.drop-slot.valid-drop { border-color: #22c55e; } /* Green for valid */
+.drop-slot.invalid-drop { border-color: #ef4444; } /* Red for invalid */
 .apply-rule-button { background-color: #10b981; margin-top: 0.5em; color: white; border: none; cursor: pointer; }
 .apply-rule-button:hover { background-color: #059669; }
 
@@ -447,4 +484,30 @@ html, #game-wrapper, .main-content-grid {
 }
 .simp-choices button:hover {
     background-color: #2563eb; /* blue-600 */
+}
+
+.proof-drop-slot {
+    border: 2px dashed #ccc;
+    border-radius: 5px;
+    margin: 5px 0;
+    padding: 10px;
+    text-align: center;
+    color: #ccc;
+    transition: all 0.2s ease-in-out;
+}
+
+.proof-drop-slot.hidden {
+    display: none;
+}
+
+.proof-drop-slot.valid-drop {
+    border-color: #4CAF50;
+    background-color: #e8f5e9;
+    color: #4CAF50;
+}
+
+.proof-drop-slot.invalid-drop {
+    border-color: #f44336;
+    background-color: #ffebee;
+    color: #f44336;
 }

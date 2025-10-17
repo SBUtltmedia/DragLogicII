@@ -1,5 +1,7 @@
 export const LogicParser = (() => {
     const operators = {
+        '□': { prec: 5, assoc: 'right' }, // Highest precedence
+        '◊': { prec: 5, assoc: 'right' },
         '~': { prec: 4, assoc: 'right' },
         '∧': { prec: 3, assoc: 'left' },
         '∨': { prec: 2, assoc: 'left' },
@@ -8,7 +10,7 @@ export const LogicParser = (() => {
     };
 
     function tokenize(text) {
-        const regex = /\s*([PQRS]|\(|\)|~|∧|∨|→|↔)\s*/g;
+        const regex = /\s*([PQRS]|\(|\)|~|∧|∨|→|↔|□|◊)\s*/g;
         return text.replace(regex, ' $1 ').trim().split(/\s+/).filter(t => t.length > 0);
     }
 
@@ -36,9 +38,9 @@ export const LogicParser = (() => {
         if (/^[PQRS]$/.test(token)) {
             return { type: 'atomic', value: consume() };
         }
-        if(token === '~') {
-            consume();
-            return {type: 'negation', operand: parseExpression(operators['~'].prec) }
+        if(token === '~' || token === '□' || token === '◊') {
+            const op = consume();
+            return {type: 'unary', operator: op, operand: parseExpression(operators[op].prec) }
         }
         throw new Error(`Unexpected token at start of expression: ${token}`);
     }
@@ -61,8 +63,15 @@ export const LogicParser = (() => {
 
     function fromAst(ast) {
         const result = fromAstRecursive(ast);
-        // Remove outermost parentheses if they exist
+        // Remove outermost parentheses if they exist and aren't necessary
         if (result.startsWith('(') && result.endsWith(')')) {
+            // A simple check to avoid removing necessary parens like in ~(P & Q)
+            let parenCount = 0;
+            for (let i = 1; i < result.length - 1; i++) {
+                if (result[i] === '(') parenCount++;
+                if (result[i] === ')') parenCount--;
+                if (parenCount < 0) return result; // Unbalanced, so outer parens are needed
+            }
             return result.slice(1, -1);
         }
         return result;
@@ -73,12 +82,12 @@ export const LogicParser = (() => {
          switch (ast.type) {
             case 'atomic':
                 return ast.value;
-            case 'negation':
+            case 'unary':
                 const operandStr = fromAstRecursive(ast.operand);
-                if (ast.operand.type === 'atomic' || ast.operand.type === 'negation') {
-                     return `~${operandStr}`;
+                if (ast.operand.type === 'atomic' || ast.operand.type === 'unary') {
+                     return `${ast.operator}${operandStr}`;
                 }
-                return `~(${operandStr})`;
+                return `${ast.operator}(${operandStr})`;
             case 'binary':
                 const left = fromAstRecursive(ast.left);
                 const right = fromAstRecursive(ast.right);
@@ -95,8 +104,8 @@ export const LogicParser = (() => {
         switch (ast1.type) {
             case 'atomic':
                 return ast1.value === ast2.value;
-            case 'negation':
-                return areEqual(ast1.operand, ast2.operand);
+            case 'unary':
+                return ast1.operator === ast2.operator && areEqual(ast1.operand, ast2.operand);
             case 'binary':
                 return ast1.operator === ast2.operator &&
                        areEqual(ast1.left, ast2.left) &&

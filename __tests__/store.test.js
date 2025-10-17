@@ -27,7 +27,8 @@ describe('Store Module - Basic Tests', () => {
     
     // Test negation
     const negation = LogicParser.textToAst('~P');
-    expect(negation.type).toBe('negation');
+    expect(negation.type).toBe('unary');
+    expect(negation.operator).toBe('~');
     expect(negation.operand.type).toBe('atomic');
     expect(negation.operand.value).toBe('P');
 

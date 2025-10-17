@@ -4,11 +4,11 @@ import { LogicParser } from './parser.js';
 
 // --- Rule Definitions and Application Functions ---
 export const ruleSet = {
-    // -- Modus Ponens (MP) --
+    // -- Propositional Rules --
     MP: {
         name: "Modus Ponens",
         premises: 2,
-        systems: ['propositional'],
+        systems: ['propositional', 'K', 'D', 'T', 'B', 'S4', 'S5'],
         slots: [
             { placeholder: 'φ → ψ', expectedPattern: 'binary.→' },
             { placeholder: 'φ', expectedPattern: 'any' }
@@ -26,45 +26,41 @@ export const ruleSet = {
             return null;
         }
     },
-
-    // -- Modus Tollens (MT) --
     MT: {
         name: "Modus Tollens",  
         premises: 2,
-        systems: ['propositional'],
+        systems: ['propositional', 'K', 'D', 'T', 'B', 'S4', 'S5'],
         slots: [
             { placeholder: 'φ → ψ', expectedPattern: 'binary.→' },
-            { placeholder: '~ψ', expectedPattern: 'negation' }
+            { placeholder: '~ψ', expectedPattern: 'unary.~' }
         ],
         conclusion: '~φ',
         apply: (premises) => {
             if (premises.length !== 2) return null;
             const [p_implies_q, not_q] = premises.map(p => p.formula);
 
-            if (p_implies_q.type === 'binary' && p_implies_q.operator === '→' && not_q.type === 'negation') {
+            if (p_implies_q.type === 'binary' && p_implies_q.operator === '→' && not_q.type === 'unary' && not_q.operator === '~') {
                 if (LogicParser.areAstsEqual(p_implies_q.right, not_q.operand)) {
-                    return { type: 'negation', operand: p_implies_q.left };
+                    return { type: 'unary', operator: '~', operand: p_implies_q.left };
                 }
             }
             return null;
         }
     },
-
-    // -- Disjunctive Syllogism (DS) --
     DS: {
         name: 'Disjunctive Syllogism (DS)',
         premises: 2,
-        systems: ['propositional'],
+        systems: ['propositional', 'K', 'D', 'T', 'B', 'S4', 'S5'],
         slots: [
             { placeholder: 'φ ∨ ψ', expectedPattern: 'binary.∨' },
-            { placeholder: '~φ', expectedPattern: 'negation' }
+            { placeholder: '~φ', expectedPattern: 'unary.~' }
         ],
         conclusion: 'ψ',
         apply: (premises) => {
             if (premises.length !== 2) return null;
             const [p_or_q, not_p] = premises.map(p => p.formula);
 
-            if (p_or_q.type === 'binary' && p_or_q.operator === '∨' && not_p.type === 'negation') {
+            if (p_or_q.type === 'binary' && p_or_q.operator === '∨' && not_p.type === 'unary' && not_p.operator === '~') {
                 if (LogicParser.areAstsEqual(p_or_q.left, not_p.operand)) {
                     return p_or_q.right;
                 }
@@ -75,12 +71,10 @@ export const ruleSet = {
             return null;
         }
     },
-
-    // -- Addition (Add) --
     Add: {
         name: 'Addition (Add / ∨I)',
         premises: 2,
-        systems: ['propositional'],
+        systems: ['propositional', 'K', 'D', 'T', 'B', 'S4', 'S5'],
         slots: [
             { placeholder: 'φ (from proof or WFF)' },
             { placeholder: 'ψ (from proof or WFF)' }
@@ -92,13 +86,11 @@ export const ruleSet = {
             const p1_line = p1.lineId;
             const p2_line = p2.lineId;
 
-            // Fail if both are from WFF constructor (i.e., neither has a lineId)
             if (!p1_line && !p2_line) {
                 EventBus.emit('feedback:show', { message: 'Addition requires at least one premise from the proof.', isError: true });
                 return null;
             }
 
-            // Determine the justification. Use the line number(s) of the premise(s) from the proof.
             const justificationLines = [p1_line, p2_line].filter(Boolean).join(', ');
 
             const ast1 = LogicParser.textToAst(p1.formula);
@@ -110,12 +102,10 @@ export const ruleSet = {
             };
         }
     },
-
-    // -- Simplification (Simp) --
     Simp: {
         name: 'Simplification (Simp)',
         premises: 1,
-        systems: ['propositional'],
+        systems: ['propositional', 'K', 'D', 'T', 'B', 'S4', 'S5'],
         slots: [
             { placeholder: 'φ ∧ ψ', expectedPattern: 'binary.∧' }
         ],
@@ -129,12 +119,10 @@ export const ruleSet = {
             return null;
         }
     },
-
-    // -- Conjunction (Conj) --
     Conj: {
         name: 'Conjunction (Conj)',
         premises: 2,
-        systems: ['propositional'],
+        systems: ['propositional', 'K', 'D', 'T', 'B', 'S4', 'S5'],
         slots: [
             { placeholder: 'φ', expectedPattern: 'any' },
             { placeholder: 'ψ', expectedPattern: 'any' }
@@ -146,12 +134,10 @@ export const ruleSet = {
             return { type: 'binary', operator: '∧', left: p, right: q };
         }
     },
-
-    // -- Constructive Dilemma (CD) --
     CD: {
         name: 'Constructive Dilemma (CD)',
         premises: 2,
-        systems: ['propositional'],
+        systems: ['propositional', 'K', 'D', 'T', 'B', 'S4', 'S5'],
         slots: [
             { placeholder: '(φ → ψ) ∧ (χ → ω)', expectedPattern: 'binary.∧' },
             { placeholder: 'φ ∨ χ', expectedPattern: 'binary.∨' }
@@ -178,14 +164,88 @@ export const ruleSet = {
             return null;
         }
     },
+
+    // -- Modal Rules --
+    D: {
+        name: '(D) / bd',
+        premises: 1,
+        systems: ['D', 'T', 'B', 'S4', 'S5'],
+        slots: [{ placeholder: '□φ', expectedPattern: 'unary.□' }],
+        conclusion: '◊φ',
+        apply: (premises) => {
+            if (premises.length !== 1) return null;
+            const box_phi = premises[0].formula;
+            if (box_phi.type === 'unary' && box_phi.operator === '□') {
+                return { type: 'unary', operator: '◊', operand: box_phi.operand };
+            }
+            return null;
+        }
+    },
+    T: {
+        name: '(T) / NI',
+        premises: 1,
+        systems: ['T', 'B', 'S4', 'S5'],
+        slots: [{ placeholder: '□φ', expectedPattern: 'unary.□' }],
+        conclusion: 'φ',
+        apply: (premises) => {
+            if (premises.length !== 1) return null;
+            const box_phi = premises[0].formula;
+            if (box_phi.type === 'unary' && box_phi.operator === '□') {
+                return box_phi.operand;
+            }
+            return null;
+        }
+    },
+    B: {
+        name: '(B)',
+        premises: 1,
+        systems: ['B', 'S5'],
+        slots: [{ placeholder: 'φ', expectedPattern: 'any' }],
+        conclusion: '□◊φ',
+        apply: (premises) => {
+            if (premises.length !== 1) return null;
+            const phi = premises[0].formula;
+            return { type: 'unary', operator: '□', operand: { type: 'unary', operator: '◊', operand: phi } };
+        }
+    },
+    4: {
+        name: '(4)',
+        premises: 1,
+        systems: ['S4', 'S5'],
+        slots: [{ placeholder: '□φ', expectedPattern: 'unary.□' }],
+        conclusion: '□□φ',
+        apply: (premises) => {
+            if (premises.length !== 1) return null;
+            const box_phi = premises[0].formula;
+            if (box_phi.type === 'unary' && box_phi.operator === '□') {
+                return { type: 'unary', operator: '□', operand: box_phi };
+            }
+            return null;
+        }
+    },
+    5: {
+        name: '(5)',
+        premises: 1,
+        systems: ['S5'],
+        slots: [{ placeholder: '◊φ', expectedPattern: 'unary.◊' }],
+        conclusion: '□◊φ',
+        apply: (premises) => {
+            if (premises.length !== 1) return null;
+            const diamond_phi = premises[0].formula;
+            if (diamond_phi.type === 'unary' && diamond_phi.operator === '◊') {
+                return { type: 'unary', operator: '□', operand: diamond_phi };
+            }
+            return null;
+        }
+    },
 };
 
 export const subproofRuleSet = {
     CP: {
-        name: "Conditional Proof",
+        name: "Conditional Proof (→I)",
         premises: 1,
         isSubproof: true,
-        systems: ['propositional'],
+        systems: ['propositional', 'K', 'D', 'T', 'B', 'S4', 'S5'],
         slots: [
             { placeholder: 'φ → ψ', expectedPattern: 'binary.→' }
         ],
@@ -195,9 +255,19 @@ export const subproofRuleSet = {
         name: "Reductio ad Absurdum",
         premises: 1,
         isSubproof: true,
-        systems: ['propositional'],
+        systems: ['propositional', 'K', 'D', 'T', 'B', 'S4', 'S5'],
         slots: [
             { placeholder: 'φ', expectedPattern: 'any' }
+        ],
+        apply: () => null
+    },
+    Strict: {
+        name: "Strict Subproof (□I)",
+        premises: 1, 
+        isSubproof: true,
+        systems: ['K', 'D', 'T', 'B', 'S4', 'S5'],
+        slots: [
+            { placeholder: '□φ', expectedPattern: 'unary.□' }
         ],
         apply: () => null
     }

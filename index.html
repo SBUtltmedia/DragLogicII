@@ -45,6 +45,8 @@
                         <div class="connective-hotspot" data-connective="∨" title="Drop TWO formulas/vars here for OR" role="region" aria-dropeffect="copy">∨</div>
                         <div class="connective-hotspot" data-connective="→" title="Drop TWO formulas/vars here for IMPLIES" role="region" aria-dropeffect="copy">→</div>
                         <div class="connective-hotspot" data-connective="↔" title="Drop TWO formulas/vars here for IFF" role="region" aria-dropeffect="copy">↔</div>
+                        <div class="connective-hotspot" data-connective="□" title="Drop ONE formula/var here for NECESSARY" role="region" aria-dropeffect="copy">□</div>
+                        <div class="connective-hotspot" data-connective="◊" title="Drop ONE formula/var here for POSSIBLE" role="region" aria-dropeffect="copy">◊</div>
                     </div>
                 </div>
             </div>
@@ -59,12 +61,16 @@
         </div>
 
         <div id="proof-area" class="game-section">
-            <h2>Proof</h2>
+                        <div class="proof-header-controls">
+                            <h2>Proof</h2>
+                            <div id="system-display"></div>
+                        </div>
             <div id="proof-problem-info">
                 <!-- Problem headers will be injected here by JS -->
             </div>
             <div id="subproof-goal-display-container" class="mt-2"></div>
             <ol id="proof-lines" role="list"></ol>
+            <div id="proof-drop-slot" class="proof-drop-slot hidden"></div>
         </div>
 
         <div id="rules-and-subproofs-column" class="game-section">

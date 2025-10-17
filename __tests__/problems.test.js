@@ -1,185 +1,92 @@
-import { ruleSet } from '../js/rules.js';
+import { store } from '../js/store.js';
+import { addProofLine, startStrictSubproof, dischargeStrictSubproof, applyActiveRule } from '../js/proof.js';
+import { handleDropOnProofArea } from '../js/drag-drop.js';
+import { problemSets } from '../js/problems.js';
 import { LogicParser } from '../js/parser.js';
 
-// Mock EventBus for tests
+// Mock the EventBus to prevent side effects in tests
 jest.mock('../js/event-bus.js', () => ({
-  EventBus: {
-    emit: jest.fn(),
-    on: jest.fn(),
-  }
+    EventBus: {
+        on: jest.fn(),
+        emit: jest.fn(),
+    },
 }));
 
-// Mock store for tests  
-jest.mock('../js/store.js', () => ({
-  store: {
-    getState: jest.fn()
-  }
-}));
-
-describe('Problem Sets Testing', () => {
-  beforeEach(() => {
-    // Reset mocks before each test
-    jest.clearAllMocks();
-  });
-
-  describe('Basic Proof Construction using Drag and Drop Simulation', () => {
-    // Test that simulates a simple problem set solution like: Show P → Q, P ⊢ Q (Modus Ponens)
-    
-    test('should demonstrate valid MP proof construction', () => {
-      // This simulates the process of constructing a proof with drag and drop:
-      // 1. Start with premises P→Q and P
-      // 2. Drag P→Q into MP rule slot 1
-      // 3. Drag P into MP rule slot 2
-      // 4. Apply MP to get Q
-
-      const testProblem = {
-        premises: ['P → Q', 'P'],
-        conclusion: 'Q'
-      };
-
-      // This would be implemented by a test that simulates:
-      // - Dropping P→Q on first slot of MP rule 
-      // - Dropping P on second slot of MP rule
-      // - Applying the rule to produce Q
-
-      expect(testProblem.premises).toContain('P → Q');
-      expect(testProblem.premises).toContain('P');
-      expect(testProblem.conclusion).toBe('Q');
+describe('Modal Logic Problem Set Solutions', () => {
+    beforeEach(() => {
+        store.getState().resetProofState();
     });
 
-    test('should demonstrate valid Conj proof construction', () => {
-      // Simulate: Show P, Q ⊢ P ∧ Q
-      
-      const testProblem = {
-        premises: ['P', 'Q'],
-        conclusion: 'P ∧ Q'
-      };
+    test('Problem 2-1 (System K)', () => {
+        store.getState().loadProblem(2, 1);
+        expect(store.getState().activeModalSystem).toBe('K');
 
-      expect(testProblem.premises).toContain('P');
-      expect(testProblem.premises).toContain('Q');
-      expect(testProblem.conclusion).toBe('P ∧ Q');
-    });
-  });
+        startStrictSubproof('□Q');
 
-  describe('Rule Application Validation in Problem Sets', () => {
-    test('should correctly apply MP rule to valid premises', () => {
-      // Simulate the application of MP
-      const mpRule = ruleSet.MP;
-      
-      // Valid premises for MP: P→Q and P 
-      const validPremises = [
-        { formula: LogicParser.textToAst('P → Q') },
-        { formula: LogicParser.textToAst('P') }
-      ];
-      
-      const result = mpRule.apply(validPremises);
-      
-      expect(result).toBeDefined();
-      expect(LogicParser.areAstsEqual(result, LogicParser.textToAst('Q'))).toBe(true);
+        // Simulate dragging the premises into the strict subproof
+        const premise1 = { formula: '□(P → Q)', lineId: '1', source: 'proof-lines' };
+        const premise2 = { formula: '□P', lineId: '2', source: 'proof-lines' };
+        const dropEvent1 = { preventDefault: () => {}, target: { closest: () => ({ dataset: { scopeLevel: '2' }, classList: { remove: () => {} } }) }, dataTransfer: { getData: () => JSON.stringify(premise1) } };
+        const dropEvent2 = { preventDefault: () => {}, target: { closest: () => ({ dataset: { scopeLevel: '2' }, classList: { remove: () => {} } }) }, dataTransfer: { getData: () => JSON.stringify(premise2) } };
+
+        handleDropOnProofArea(dropEvent1);
+        handleDropOnProofArea(dropEvent2);
+        
+        store.getState().setActiveRule('MP');
+        store.getState().addPremise({ formula: 'P → Q', lineId: '3' });
+        store.getState().addPremise({ formula: 'P', lineId: '4' });
+        applyActiveRule();
+
+        dischargeStrictSubproof();
+
+        const finalState = store.getState();
+        const lastLine = finalState.proofLines[finalState.proofLines.length - 1];
+        expect(LogicParser.areAstsEqual(lastLine.formula, LogicParser.textToAst('□Q'))).toBe(true);
     });
 
-    test('should correctly reject invalid MP application', () => {
-      // Invalid premises for MP
-      const mpRule = ruleSet.MP;
-      
-      const invalidPremises = [
-        { formula: LogicParser.textToAst('P → Q') },
-        { formula: LogicParser.textToAst('R') }
-      ];
-      
-      const result = mpRule.apply(invalidPremises);
-      
-      expect(result).toBeNull();
+    test('Problem 2-2 (System D)', () => {
+        store.getState().loadProblem(2, 2);
+        store.getState().setActiveRule('D');
+        store.getState().addPremise({ formula: '□P', lineId: '1' });
+        applyActiveRule();
+        const state = store.getState();
+        const lastLine = state.proofLines[state.proofLines.length - 1];
+        expect(LogicParser.areAstsEqual(lastLine.formula, LogicParser.textToAst('◊P'))).toBe(true);
     });
 
-    test('should correctly apply Conj rule to valid premises', () => {
-      // Valid premises for Conj: P and Q
-      const conjRule = ruleSet.Conj;
-      
-      const validPremises = [
-        { formula: LogicParser.textToAst('P') },
-        { formula: LogicParser.textToAst('Q') }
-      ];
-      
-      const result = conjRule.apply(validPremises);
-      
-      expect(result).toBeDefined();
-      expect(LogicParser.areAstsEqual(result, LogicParser.textToAst('P ∧ Q'))).toBe(true);
+    test('Problem 2-3 (System T)', () => {
+        store.getState().loadProblem(2, 3);
+        store.getState().setActiveRule('T');
+        store.getState().addPremise({ formula: '□(P → Q)', lineId: '1' });
+        applyActiveRule();
+
+        store.getState().setActiveRule('MP');
+        store.getState().addPremise({ formula: 'P → Q', lineId: '3' });
+        store.getState().addPremise({ formula: 'P', lineId: '2' });
+        applyActiveRule();
+
+        const state = store.getState();
+        const lastLine = state.proofLines[state.proofLines.length - 1];
+        expect(LogicParser.areAstsEqual(lastLine.formula, LogicParser.textToAst('Q'))).toBe(true);
     });
-  });
 
-  describe('Complete Problem Solution Simulation', () => {
-    test('should simulate a complete proof using multiple rules', () => {
-      // Simulate constructing proof: P ⊢ P ∨ Q
-      // This would consist of:
-      // 1. Premise: P
-      // 2. Add rule to get P ∨ Q
-      
-      const problemSet = {
-        premises: ['P'],
-        conclusion: 'P ∨ Q',
-        solutionSteps: [
-          { 
-            rule: 'Add', 
-            premises: ['P'], 
-            conclusion: 'P ∨ Q' 
-          }
-        ]
-      };
-
-      expect(problemSet.premises).toContain('P');
-      expect(problemSet.conclusion).toBe('P ∨ Q');
-      
-      // Test that the Add rule works correctly
-      const addRule = ruleSet.Add;
-      const addResult = addRule.apply([
-        { formula: LogicParser.textToAst('P') },
-        { formula: LogicParser.textToAst('Q') }  // Second premise for Add - in practice would be from WFF or proof area
-      ]);
-      
-      expect(addResult).toBeDefined();
+    test('Problem 2-5 (System S4)', () => {
+        store.getState().loadProblem(2, 5);
+        store.getState().setActiveRule('4');
+        store.getState().addPremise({ formula: '□P', lineId: '1' });
+        applyActiveRule();
+        const state = store.getState();
+        const lastLine = state.proofLines[state.proofLines.length - 1];
+        expect(LogicParser.areAstsEqual(lastLine.formula, LogicParser.textToAst('□□P'))).toBe(true);
     });
-  });
 
-  describe('Drag and Drop Events in Problem Context', () => {
-    // Test the drag sequence that would occur when solving a problem:
-    // 1. Drag P from premises to Add rule first slot
-    // 2. Drag Q (from WFF construction) to Add rule second slot  
-    // 3. Apply rule to get P ∨ Q
-
-    test('should demonstrate drag and drop sequence for Add rule', () => {
-      const addRule = ruleSet.Add;
-      
-      // Valid premises: P from proof area, Q from WFF constructor
-      const premises = [
-        { formula: LogicParser.textToAst('P'), source: 'proof-lines' },
-        { formula: LogicParser.textToAst('Q'), source: 'wff-constructor' }
-      ];
-      
-      const result = addRule.apply(premises);
-      
-      expect(result).toBeDefined();
-      expect(LogicParser.areAstsEqual(result, LogicParser.textToAst('P ∨ Q'))).toBe(true);
+    test('Problem 2-7 (System S5)', () => {
+        store.getState().loadProblem(2, 7);
+        store.getState().setActiveRule('5');
+        store.getState().addPremise({ formula: '◊P', lineId: '1' });
+        applyActiveRule();
+        const state = store.getState();
+        const lastLine = state.proofLines[state.proofLines.length - 1];
+        expect(LogicParser.areAstsEqual(lastLine.formula, LogicParser.textToAst('□◊P'))).toBe(true);
     });
-  });
-
-  describe('Multiple Rule Combination Problem', () => {
-    test('should handle complex proof sequences', () => {
-      // Simulate a simple complex proof:
-      // Given: P → Q, P
-      // Conclusion: Q
-      // 1. Apply MP with premises P→Q and P to get Q
-      
-      const mpRule = ruleSet.MP;
-      
-      // These would be applied in sequence:
-      const premise1 = { formula: LogicParser.textToAst('P → Q') };
-      const premise2 = { formula: LogicParser.textToAst('P') };
-      
-      const result = mpRule.apply([premise1, premise2]);
-      
-      expect(result).toBeDefined();
-      expect(LogicParser.areAstsEqual(result, LogicParser.textToAst('Q'))).toBe(true);
-    });
-  });
 });
