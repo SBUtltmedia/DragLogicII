@@ -51,7 +51,6 @@ export function addProofLine(formula, justification, scopeLevel, isAssumptionFla
         cleanFormula = LogicParser.astToText(formulaAst);
     }
 
-    // --- Modal Logic Importation Rules ---
     const targetSubproof = subGoalStack.find(sp => sp.scopeLevel === scopeLevel);
     if (targetSubproof && targetSubproof.isStrict && !fromImport) {
         EventBus.emit('feedback:show', { message: `Cannot add line directly to strict subproof. Use importation rules.`, isError: true });
@@ -95,7 +94,13 @@ export function addProofLine(formula, justification, scopeLevel, isAssumptionFla
                     dischargeCP(activeSubProof, newLine.lineNumber);
                 }
             } else if (activeSubProof.type === 'Strict') {
-                if (LogicParser.areAstsEqual(formulaAst, activeSubProof.goalFormula)) {
+                console.log("--- Checking for strict subproof discharge ---");
+                console.log("Newly added formula AST:", JSON.stringify(formulaAst, null, 2));
+                console.log("Subproof goal formula AST:", JSON.stringify(activeSubProof.goalFormula, null, 2));
+                const areEqual = LogicParser.areAstsEqual(formulaAst, activeSubProof.goalFormula);
+                console.log("Are they equal?", areEqual);
+                if (areEqual) {
+                    console.log("Goal met, discharging strict subproof...");
                     dischargeStrictSubproof();
                 }
             }
@@ -176,21 +181,14 @@ export function dischargeCP(subproof, consequentLineId) {
 }
 
 export function dischargeStrictSubproof() {
-    const { proofLines, subGoalStack } = store.getState();
-    const strictSubproof = subGoalStack.find(sg => sg.isStrict);
-    if (!strictSubproof) return;
+    const { subGoalStack } = store.getState();
+    const activeSubproof = subGoalStack[subGoalStack.length - 1];
+    if (!activeSubproof || !activeSubproof.isStrict) return;
 
-    const linesInSubproof = proofLines.filter(l => l.scopeLevel === strictSubproof.scopeLevel && !l.isAssumption);
-    if (linesInSubproof.length === 0) {
-        EventBus.emit('feedback:show', { message: 'Cannot discharge an empty strict subproof.', isError: true });
-        return;
-    }
-
-    const lastLine = linesInSubproof[linesInSubproof.length - 1];
     const dischargedSubproof = store.getState().endSubproof();
     const parentScopeLevel = dischargedSubproof.scopeLevel - 1;
 
-    const conclusion = { type: 'unary', operator: '□', operand: lastLine.formula };
+    const conclusion = { type: 'unary', operator: '□', operand: dischargedSubproof.goalFormula };
     const justification = `□I`;
 
     addProofLine(conclusion, justification, parentScopeLevel);
@@ -258,9 +256,4 @@ export function initializeProof() {
     EventBus.on('rule:apply', (data) => {
         applyRule(data.ruleName, data.premiseLineNumbers);
     });
-
-    const { currentProblem } = store.getState();
-    if (currentProblem) {
-        store.getState().loadProblem(currentProblem.set, currentProblem.number);
-    }
 }

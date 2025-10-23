@@ -1,8 +1,9 @@
 import { EventBus } from './event-bus.js';
 import { store } from './store.js';
-import { addProofLine, isNegationOf, startRAA, dischargeRAA, startConditionalIntroduction } from './proof.js';
+import { addProofLine, isNegationOf, startRAA, dischargeRAA, startConditionalIntroduction, dischargeCP, dischargeStrictSubproof } from './proof.js';
 import { LogicParser } from './parser.js';
 import { Validator } from './validator.js';
+import { Rules } from './rules.js';
 
 // --- Drag Data Utilities ---
 export function setDragData(event, dataObject) {
@@ -14,12 +15,42 @@ export function setDragData(event, dataObject) {
 }
 
 // --- Validation Logic ---
+export function isPremiseValid(draggedData, activeRule) {
+    const rule = Rules.getRuleSet()[activeRule] || Rules.getSubproofRuleSet()[activeRule];
+    if (!rule) return { isValid: false, message: 'No active rule.' };
+
+    const requiresProofLine = !rule.isSubproof && activeRule !== 'Add';
+    if (requiresProofLine && draggedData.source !== 'proof-lines') {
+        return { isValid: false, message: 'This rule requires premises from the proof.' };
+    }
+
+    return { isValid: true };
+}
+
 export function getDropValidationState(data, targetLi) {
     if (!data || !data.formula) {
         return { isValid: false, message: 'Invalid drag data' };
     }
 
     const { subGoalStack, activeModalSystem, currentScopeLevel } = store.getState();
+
+    if (targetLi && targetLi.classList.contains('show-line')) {
+        const targetScope = parseInt(targetLi.dataset.scopeLevel) + 1;
+        const subproof = subGoalStack.find(sg => sg.scopeLevel === targetScope);
+
+        if (subproof) {
+            const draggedFormulaAst = LogicParser.textToAst(data.formula);
+            if (LogicParser.areAstsEqual(draggedFormulaAst, subproof.goalFormula)) {
+                if (data.scopeLevel === subproof.scopeLevel) {
+                    if (subproof.type === 'Strict') {
+                        return { isValid: true, justification: '□I', isDischarge: true, dischargeType: 'Strict', dischargeArgs: [subproof, data.lineId] };
+                    } else if (subproof.type === 'CP') {
+                        return { isValid: true, justification: '→I', isDischarge: true, dischargeType: 'CP', dischargeArgs: [subproof, data.lineId] };
+                    }
+                }
+            }
+        }
+    }
 
     let targetScope;
     if (targetLi) {
@@ -109,9 +140,19 @@ export function handleWffDragStart(event) {
     let data;
 
     if (formulaElement) {
+        const parentId = formulaElement.parentElement.id;
+        let source;
+        if (parentId === 'wff-output-tray') {
+            source = 'wff-output-tray';
+        } else if (formulaElement.closest('#proof-lines')) {
+            source = 'proof-lines';
+        } else {
+            source = 'unknown';
+        }
+
         data = {
             formula: formulaElement.dataset.formula,
-            source: formulaElement.parentElement.id,
+            source: source,
             elementId: formulaElement.id,
             lineId: formulaElement.closest('li')?.dataset.lineNumber
         };
@@ -200,7 +241,13 @@ export function handleDropOnProofArea(e) {
 
     if (validationState.isValid) {
         if (validationState.isDischarge) {
-            dischargeRAA(...validationState.dischargeArgs);
+            if (validationState.dischargeType === 'Strict') {
+                dischargeStrictSubproof(...validationState.dischargeArgs);
+            } else if (validationState.dischargeType === 'CP') {
+                dischargeCP(...validationState.dischargeArgs);
+            } else {
+                dischargeRAA(...validationState.dischargeArgs);
+            }
         } else if (validationState.isStartRaa) {
             startRAA(validationState.formula);
             if (data.source === 'wff-output-tray') { 
@@ -216,7 +263,7 @@ export function handleDropOnProofArea(e) {
 
 // --- Generic Drag Over/Leave Highlighting ---
 
-export function createDragHandler(selector, className) {
+export function createDragHandler(selector, className, ruleKey = null) {
     const dragOver = (event) => {
         event.preventDefault();
         const target = event.target.closest(selector);
@@ -224,20 +271,30 @@ export function createDragHandler(selector, className) {
 
         target.classList.add(className);
 
-        const pattern = target.dataset.expectedPattern;
-        if (pattern) {
-            try {
-                const jsonData = event.dataTransfer.getData('application/json');
-                if (!jsonData) return;
-                const data = JSON.parse(jsonData);
-                const ast = LogicParser.textToAst(data.formula);
-                if (Validator.validate(ast, pattern)) {
-                    target.classList.add('valid-drop');
-                } else {
+        const jsonData = event.dataTransfer.getData('application/json');
+        if (!jsonData) return;
+        const data = JSON.parse(jsonData);
+
+        if (ruleKey) {
+            const validation = isPremiseValid(data, ruleKey);
+            if (validation.isValid) {
+                target.classList.add('valid-drop');
+            } else {
+                target.classList.add('invalid-drop');
+            }
+        } else {
+            const pattern = target.dataset.expectedPattern;
+            if (pattern) {
+                try {
+                    const ast = LogicParser.textToAst(data.formula);
+                    if (Validator.validate(ast, pattern)) {
+                        target.classList.add('valid-drop');
+                    } else {
+                        target.classList.add('invalid-drop');
+                    }
+                } catch (e) {
                     target.classList.add('invalid-drop');
                 }
-            } catch (e) {
-                target.classList.add('invalid-drop');
             }
         }
     };

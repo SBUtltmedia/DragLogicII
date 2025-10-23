@@ -33,7 +33,6 @@ export const store = createStore((set, get) => ({
     setActiveModalSystem: (system) => set({ activeModalSystem: system }),
 
     loadProblem: (setNumber, problemNumber) => {
-        console.log(`Loading problem: set ${setNumber}, number ${problemNumber}`);
         const problem = problemSets[setNumber]?.problems[problemNumber - 1];
         if (!problem) {
             get().addFeedback(`Problem ${setNumber}-${problemNumber} not found.`, 'error');
@@ -76,6 +75,7 @@ export const store = createStore((set, get) => ({
             feedbackHistory: [{ message: `Problem loaded: ${problemSets[setNumber].name} #${problemNumber}`, type: 'info' }],
             currentFeedbackIndex: 0
         });
+
         EventBus.emit('problem:loaded');
         EventBus.emit('render');
     },

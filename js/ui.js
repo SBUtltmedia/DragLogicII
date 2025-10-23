@@ -2,7 +2,7 @@ import { store } from './store.js';
 import { EventBus } from './event-bus.js';
 import { problemSets } from './problems.js';
 import { Rules } from './rules.js';
-import { handleWffDragStart, handleGenericDragEnd, handleDropOnConnectiveHotspot, handleDropOnWffOutputTray, handleDropOnTrashCan, createDragHandler, handleDragStartProofLine, getDropValidationState, handleDropOnProofArea } from './drag-drop.js';
+import { handleWffDragStart, handleGenericDragEnd, handleDropOnConnectiveHotspot, handleDropOnWffOutputTray, handleDropOnTrashCan, createDragHandler, handleDragStartProofLine, getDropValidationState, handleDropOnProofArea, isPremiseValid } from './drag-drop.js';
 import { initializeProof, applyActiveRule, dischargeRAA, dischargeCP, startConditionalIntroduction, startRAA, startStrictSubproof, dischargeStrictSubproof, addProofLine } from './proof.js';
 import { startTutorial, propositionalTutorialSteps } from './tutorial.js';
 import { LogicParser } from './parser.js';
@@ -360,7 +360,7 @@ function renderRules() {
                 } else {
                     slotElement.textContent = slot.placeholder;
                 }
-                const dragHandler = createDragHandler('.drop-slot', 'drag-over');
+                const dragHandler = createDragHandler('.drop-slot', 'drag-over', ruleKey);
                 slotElement.addEventListener('dragover', dragHandler.dragover);
                 slotElement.addEventListener('dragleave', dragHandler.dragleave);
                 slotElement.addEventListener('drop', (e) => {
@@ -422,7 +422,7 @@ function renderSubproofs() {
                 } else {
                     slotElement.textContent = slot.placeholder;
                 }
-                const dragHandler = createDragHandler('.drop-slot', 'drag-over');
+                const dragHandler = createDragHandler('.drop-slot', 'drag-over', ruleKey);
                 slotElement.addEventListener('dragover', dragHandler.dragover);
                 slotElement.addEventListener('dragleave', dragHandler.dragleave);
                 slotElement.addEventListener('drop', (e) => {
@@ -450,6 +450,12 @@ function handleDropOnRuleSlot(event, ruleKey, slotIndex) {
     const data = JSON.parse(jsonData);
 
     const { activeRule } = store.getState();
+    const validation = isPremiseValid(data, activeRule);
+    if (!validation.isValid) {
+        EventBus.emit('feedback:show', { message: validation.message, isError: true });
+        return;
+    }
+
     const rule = Rules.getRuleSet()[activeRule] || Rules.getSubproofRuleSet()[activeRule];
 
     if (activeRule === 'Simp') {
@@ -462,21 +468,11 @@ function handleDropOnRuleSlot(event, ruleKey, slotIndex) {
 
     if (rule.isSubproof) {
         if (activeRule === 'CP') {
-            const ast = LogicParser.textToAst(data.formula);
-            if (ast.type === 'binary' && ast.operator === '→') {
-                startConditionalIntroduction(data.formula);
-            } else {
-                store.getState().addFeedback('Only a conditional formula can be dropped here.', 'error');
-            }
+            startConditionalIntroduction(data.formula);
         } else if (activeRule === 'RAA') {
             startRAA(data.formula);
         } else if (activeRule === 'Strict') {
-            const ast = LogicParser.textToAst(data.formula);
-            if (ast.type === 'unary' && ast.operator === '□') {
-                startStrictSubproof(data.formula);
-            } else {
-                store.getState().addFeedback('Only a Box (□) formula can be used to start a strict subproof.', 'error');
-            }
+            startStrictSubproof(data.formula);
         }
     } else {
         store.getState().addPremise(data, slotIndex);
