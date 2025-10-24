@@ -202,8 +202,8 @@ export const store = createStore((set, get) => ({
             type,
             scopeLevel: currentScopeLevel + 1,
             assumptionFormula,
-            goalFormula: additionalData.goalFormula || null,
-            isStrict: additionalData.isStrict || false, // Add isStrict flag
+            goalFormula: goalFormula || null,
+            isStrict: additionalData.isStrict || false,
         };
         
         set(state => ({

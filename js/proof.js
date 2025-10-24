@@ -94,13 +94,7 @@ export function addProofLine(formula, justification, scopeLevel, isAssumptionFla
                     dischargeCP(activeSubProof, newLine.lineNumber);
                 }
             } else if (activeSubProof.type === 'Strict') {
-                console.log("--- Checking for strict subproof discharge ---");
-                console.log("Newly added formula AST:", JSON.stringify(formulaAst, null, 2));
-                console.log("Subproof goal formula AST:", JSON.stringify(activeSubProof.goalFormula, null, 2));
-                const areEqual = LogicParser.areAstsEqual(formulaAst, activeSubProof.goalFormula);
-                console.log("Are they equal?", areEqual);
-                if (areEqual) {
-                    console.log("Goal met, discharging strict subproof...");
+                if (LogicParser.areAstsEqual(formulaAst, activeSubProof.goalFormula)) {
                     dischargeStrictSubproof();
                 }
             }

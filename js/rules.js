@@ -87,7 +87,7 @@ export const ruleSet = {
             const p2_line = p2.lineId;
 
             if (!p1_line && !p2_line) {
-                EventBus.emit('feedback:show', { message: 'Addition requires at least one premise from the proof.', isError: true });
+                EventBus.emit('feedback:show', { message: 'Addition requires at least one line from the proof.', isError: true });
                 return null;
             }
 
