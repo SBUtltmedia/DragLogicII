@@ -16,6 +16,10 @@ export const problemSet2 = {
             // System S5: The most powerful importation rules
             { system: 'S5', premises: ['◊P'], goal: {formula: '□◊P'} },
             { system: 'S5', premises: ['◊□P'], goal: {formula: '□P'} },
+                 { system: 'T', premises: ['□(P → Q)'], goal: {formula: '(□P → □Q)'} },
+                      { system: 'S4', premises: ['□P → □□P'], goal: {formula: '◊◊P → ◊P'} },
+                           { system: 'S5', premises: ['◊□P'], goal: {formula: '□P'} },
+
         ]
     }
 };

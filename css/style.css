@@ -107,6 +107,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    overflow: hidden; /* Hide overflowing animation */
 }
 
 
@@ -252,11 +253,40 @@ button {
     margin: 0 0.5em; 
     font-size: calc(var(--base-font-size) * 1.8); 
     user-select: text;
+    position: relative; /* For animation positioning */
 }
+
 .feedback-nav-button {
     width: 1.5em;
     height: 1.5em;
     font-size: calc(var(--base-font-size) * 1.5); /* Scale buttons */
+    cursor: pointer;
+    border: none;
+    background: none;
+    color: #e2e8f0;
+    visibility: hidden; /* Hidden by default */
+}
+
+.feedback-nav-button.visible { 
+    visibility: visible; 
+}
+
+@keyframes slide-in-right {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slide-out-left {
+    from { transform: translateX(0); opacity: 1; }
+    to { transform: translateX(-100%); opacity: 0; }
+}
+
+.animate-in-right {
+    animation: slide-in-right 0.5s forwards;
+}
+
+.animate-out-left {
+    animation: slide-out-left 0.5s forwards;
 }
 
 /* WFF Construction & Inference Rules Specifics */

@@ -157,14 +157,14 @@ export const store = createStore((set, get) => ({
         set(state => ({
             currentFeedbackIndex: Math.min(state.currentFeedbackIndex + 1, state.feedbackHistory.length - 1)
         }));
-        EventBus.emit('feedback:update');
+        EventBus.emit('feedback:update', { direction: 'next' });
     },
 
     showPreviousFeedback: () => {
         set(state => ({
             currentFeedbackIndex: Math.max(state.currentFeedbackIndex - 1, 0)
         }));
-        EventBus.emit('feedback:update');
+        EventBus.emit('feedback:update', { direction: 'prev' });
     },
 
     setActiveRule: (rule, silent = false) => {
@@ -184,7 +184,12 @@ export const store = createStore((set, get) => ({
     addPremise: (premise, index) => {
         set(state => {
             const newPremises = [...state.collectedPremises];
-            newPremises[index] = premise;
+            // If no index provided, append to end
+            if (index === undefined) {
+                newPremises.push(premise);
+            } else {
+                newPremises[index] = premise;
+            }
             return { collectedPremises: newPremises };
         });
         EventBus.emit('render');

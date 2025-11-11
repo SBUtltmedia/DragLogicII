@@ -51,6 +51,11 @@ export function addProofLine(formula, justification, scopeLevel, isAssumptionFla
         cleanFormula = LogicParser.astToText(formulaAst);
     }
 
+    // Strict subproofs can only have lines added via:
+    // 1. fromImport = true (imported from outside via importation rules)
+    // 2. Derived via inference rules from lines already in the subproof (handled by applyActiveRule)
+    // The check here is mainly for drag-drop of premises/WFFs, which is handled elsewhere
+    // So we allow lines when fromImport is true (the flag means "allowed in strict subproof")
     const targetSubproof = subGoalStack.find(sp => sp.scopeLevel === scopeLevel);
     if (targetSubproof && targetSubproof.isStrict && !fromImport) {
         EventBus.emit('feedback:show', { message: `Cannot add line directly to strict subproof. Use importation rules.`, isError: true });
@@ -196,6 +201,20 @@ export function applyActiveRule() {
     if (!activeRule) return;
 
     const rule = Rules.getRuleSet()[activeRule];
+
+    // Validate premise sources (except for Addition which can use WFF constructor)
+    if (activeRule !== 'Add') {
+        const hasInvalidSource = collectedPremises.some(p =>
+            p.source && p.source !== 'proof-lines'
+        );
+        if (hasInvalidSource) {
+            store.getState().addFeedback(`Rule ${activeRule} requires all premises from the proof, not from the WFF constructor.`, 'error');
+            store.getState().clearPremises();
+            store.getState().setActiveRule(null);
+            return;
+        }
+    }
+
     const premisesData = collectedPremises.map((p, index) => ({
         ...p,
         formula: LogicParser.textToAst(p.formula),
@@ -206,7 +225,7 @@ export function applyActiveRule() {
     if (result) {
         const resultAst = result.resultAst || result;
         const justification = result.justification || `${activeRule} ${premisesData.map(p => p.lineId || 'WFF').join(', ')}`;
-        
+
         const targetSubproof = subGoalStack.find(sp => sp.scopeLevel === currentScopeLevel);
         const isInsideStrictSubproof = targetSubproof && targetSubproof.isStrict;
 

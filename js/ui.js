@@ -2,7 +2,7 @@ import { store } from './store.js';
 import { EventBus } from './event-bus.js';
 import { problemSets } from './problems.js';
 import { Rules } from './rules.js';
-import { handleWffDragStart, handleGenericDragEnd, handleDropOnConnectiveHotspot, handleDropOnWffOutputTray, handleDropOnTrashCan, createDragHandler, handleDragStartProofLine, getDropValidationState, handleDropOnProofArea, isPremiseValid } from './drag-drop.js';
+import { handleWffDragStart, handleGenericDragEnd, handleDropOnConnectiveHotspot, handleDropOnWffOutputTray, handleDropOnTrashCan, createDragHandler, handleDragStartProofLine, getDropValidationState, handleDropOnProofArea } from './drag-drop.js';
 import { initializeProof, applyActiveRule, dischargeRAA, dischargeCP, startConditionalIntroduction, startRAA, startStrictSubproof, dischargeStrictSubproof, addProofLine } from './proof.js';
 import { startTutorial, propositionalTutorialSteps } from './tutorial.js';
 import { LogicParser } from './parser.js';
@@ -11,6 +11,9 @@ import { handleDraggableClick, handleDroppableClick } from './click-to-move.js';
 // --- DOM Element References ---
 let wffOutputTray, draggableVariables, connectiveHotspots, trashCanDropArea, proofList, proofFeedbackDiv, subGoalDisplayContainer, gameTitle, prevFeedbackBtn, nextFeedbackBtn, helpIcon, subproofsArea, inferenceRulesArea, winModalOverlay, modalNextProblemBtn, modalCloseBtn, simpPopup, simpChoiceLeft, simpChoiceRight, systemDisplay, proofDropSlot;
 let gameWrapper;
+
+let feedbackTimeout;
+let isFeedbackVisible = false;
 
 export function cacheDomElements() {
     wffOutputTray = document.getElementById('wff-output-tray');
@@ -167,13 +170,15 @@ export function initializeUI() {
     }
     
     if (prevFeedbackBtn) {
-        prevFeedbackBtn.addEventListener('click', () => {
+        prevFeedbackBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent global click handler
             store.getState().showPreviousFeedback();
         });
     }
-    
+
     if (nextFeedbackBtn) {
-        nextFeedbackBtn.addEventListener('click', () => {
+        nextFeedbackBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent global click handler
             store.getState().showNextFeedback();
         });
     }
@@ -185,7 +190,7 @@ export function initializeUI() {
             const nextProblemNumber = currentProblem.number + 1;
     
             if (nextProblemNumber <= currentSet.problems.length) {
-                store.getState().loadProblem(currentProblem.set, nextProblemNumber);
+                window.location.hash = `set=${currentProblem.set}&problem=${nextProblemNumber}`;
             } else {
                 EventBus.emit('feedback:show', { message: 'Last problem in the set!', isError: false });
             }
@@ -212,12 +217,24 @@ export function addEventListeners() {
     EventBus.on('feedback:show', (data) => {
         store.getState().addFeedback(data.message, data.isError ? 'error' : 'success');
     });
-    EventBus.on('feedback:update', renderFeedback);
+    EventBus.on('feedback:update', (data) => renderFeedback(data));
     EventBus.on('problem:loaded', () => {
         updateProblemDisplay();
     });
     EventBus.on('subgoal:update', () => {
         updateSubGoalDisplay();
+    });
+
+    window.addEventListener('click', (e) => {
+        // Don't dismiss if clicking on the feedback area or nav buttons
+        if (e.target.closest('#feedback-container')) {
+            return;
+        }
+
+        if (isFeedbackVisible) {
+            clearTimeout(feedbackTimeout);
+            proofFeedbackDiv.classList.add('animate-out-left');
+        }
     });
 }
 
@@ -360,7 +377,7 @@ function renderRules() {
                 } else {
                     slotElement.textContent = slot.placeholder;
                 }
-                const dragHandler = createDragHandler('.drop-slot', 'drag-over', ruleKey);
+                const dragHandler = createDragHandler('.drop-slot', 'drag-over');
                 slotElement.addEventListener('dragover', dragHandler.dragover);
                 slotElement.addEventListener('dragleave', dragHandler.dragleave);
                 slotElement.addEventListener('drop', (e) => {
@@ -422,7 +439,7 @@ function renderSubproofs() {
                 } else {
                     slotElement.textContent = slot.placeholder;
                 }
-                const dragHandler = createDragHandler('.drop-slot', 'drag-over', ruleKey);
+                const dragHandler = createDragHandler('.drop-slot', 'drag-over');
                 slotElement.addEventListener('dragover', dragHandler.dragover);
                 slotElement.addEventListener('dragleave', dragHandler.dragleave);
                 slotElement.addEventListener('drop', (e) => {
@@ -450,12 +467,6 @@ function handleDropOnRuleSlot(event, ruleKey, slotIndex) {
     const data = JSON.parse(jsonData);
 
     const { activeRule } = store.getState();
-    const validation = isPremiseValid(data, activeRule);
-    if (!validation.isValid) {
-        EventBus.emit('feedback:show', { message: validation.message, isError: true });
-        return;
-    }
-
     const rule = Rules.getRuleSet()[activeRule] || Rules.getSubproofRuleSet()[activeRule];
 
     if (activeRule === 'Simp') {
@@ -468,11 +479,21 @@ function handleDropOnRuleSlot(event, ruleKey, slotIndex) {
 
     if (rule.isSubproof) {
         if (activeRule === 'CP') {
-            startConditionalIntroduction(data.formula);
+            const ast = LogicParser.textToAst(data.formula);
+            if (ast.type === 'binary' && ast.operator === '→') {
+                startConditionalIntroduction(data.formula);
+            } else {
+                store.getState().addFeedback('Only a conditional formula can be dropped here.', 'error');
+            }
         } else if (activeRule === 'RAA') {
             startRAA(data.formula);
         } else if (activeRule === 'Strict') {
-            startStrictSubproof(data.formula);
+            const ast = LogicParser.textToAst(data.formula);
+            if (ast.type === 'unary' && ast.operator === '□') {
+                startStrictSubproof(data.formula);
+            } else {
+                store.getState().addFeedback('Only a Box (□) formula can be used to start a strict subproof.', 'error');
+            }
         }
     } else {
         store.getState().addPremise(data, slotIndex);
@@ -502,18 +523,65 @@ function updateConnectiveHotspots(wffConstruction) {
     }
 }
 
-function renderFeedback() {
+function renderFeedback(eventData = {}) {
     if (!proofFeedbackDiv) return;
+
+    clearTimeout(feedbackTimeout);
 
     const { feedbackHistory, currentFeedbackIndex } = store.getState();
     const feedback = feedbackHistory[currentFeedbackIndex];
 
+    // Show/hide navigation arrows
+    if (currentFeedbackIndex > 0) {
+        prevFeedbackBtn.classList.add('visible');
+    } else {
+        prevFeedbackBtn.classList.remove('visible');
+    }
+
+    if (currentFeedbackIndex < feedbackHistory.length - 1) {
+        nextFeedbackBtn.classList.add('visible');
+    } else {
+        nextFeedbackBtn.classList.remove('visible');
+    }
+
     if (feedback) {
+        isFeedbackVisible = true;
+
+        // Clear animations
+        proofFeedbackDiv.classList.remove('animate-in-right', 'animate-out-left');
+
+        // Update message
         proofFeedbackDiv.textContent = feedback.message;
         proofFeedbackDiv.className = `alert ${feedback.type === 'error' ? 'alert-danger' : 'alert-success'}`;
+
+        // Animate in
+        void proofFeedbackDiv.offsetWidth; // Force reflow
+        proofFeedbackDiv.classList.add('animate-in-right');
+
+        // Clean up animation class when done
+        proofFeedbackDiv.addEventListener('animationend', (e) => {
+            if (e.animationName === 'slide-in-right') {
+                proofFeedbackDiv.classList.remove('animate-in-right');
+            } else if (e.animationName === 'slide-out-left') {
+                proofFeedbackDiv.classList.remove('animate-out-left');
+                isFeedbackVisible = false;
+            }
+        }, { once: true });
+
+        // Auto-hide after 5 seconds (only for new messages, not when navigating)
+        if (!eventData.direction) {
+            feedbackTimeout = setTimeout(() => {
+                if (isFeedbackVisible) {
+                    proofFeedbackDiv.classList.add('animate-out-left');
+                }
+            }, 5000);
+        }
     } else {
+        // No feedback to show
         proofFeedbackDiv.textContent = '';
         proofFeedbackDiv.className = '';
+        proofFeedbackDiv.classList.remove('animate-in-right', 'animate-out-left');
+        isFeedbackVisible = false;
     }
 }
 
